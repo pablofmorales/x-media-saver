@@ -1,3 +1,4 @@
+import "./styles.css";
 import { EXTENSION_NAME } from "../shared/constants";
 import {
   getAllTweetsFromNode,
