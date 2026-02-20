@@ -24,14 +24,14 @@
   "content_scripts": [
     {
       "js": [
-        "assets/index.ts-loader-cNldrJDu.js"
+        "assets/index.ts-loader-DocII-my.js"
       ],
       "matches": [
         "https://x.com/*",
         "https://twitter.com/*"
       ],
       "css": [
-        "assets/index-XXjE9lLt.css"
+        "assets/index-DMqVOBvQ.css"
       ]
     }
   ],
@@ -46,7 +46,7 @@
       ],
       "resources": [
         "assets/constants-DEZdbWmU.js",
-        "assets/index.ts-U1WvrF9H.js"
+        "assets/index.ts-BtX6PKat.js"
       ],
       "use_dynamic_url": false
     }

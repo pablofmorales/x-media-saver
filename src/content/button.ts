@@ -16,7 +16,8 @@ const BUTTON_ATTR = "data-xms-save-btn";
 const DOWNLOAD_ICON_SVG = `
 <svg viewBox="0 0 24 24" aria-hidden="true" class="xms-icon">
   <path d="M12 2a1 1 0 0 1 1 1v10.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-5 5a1 1 0 0 1-1.414 0l-5-5a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1zM5 20a1 1 0 1 0 0 2h14a1 1 0 1 0 0-2H5z"/>
-</svg>`;
+</svg>
+<div class="xms-spinner"></div>`;
 
 function getTweetId(tweet: HTMLElement): string | null {
   // Tweet links follow the pattern /<user>/status/<id>
@@ -63,6 +64,9 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
 
     console.log(`[${EXTENSION_NAME}] Save button clicked for tweet ${tweetId}`);
 
+    button.classList.add("xms-loading");
+    const clearLoading = () => button.classList.remove("xms-loading");
+
     try {
       const username = getUsername(tweet) ?? "unknown";
       const media = detectMedia(tweet);
@@ -76,7 +80,10 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
           username,
         };
         console.log(`[${EXTENSION_NAME}] Sending download-video message`, message);
-        chrome.runtime.sendMessage(message);
+        chrome.runtime.sendMessage(message, (response) => {
+          console.log(`[${EXTENSION_NAME}] Video download response:`, response);
+          clearLoading();
+        });
         return;
       }
 
@@ -85,6 +92,7 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
 
       if (imageUrls.length === 0) {
         console.warn(`[${EXTENSION_NAME}] No media found in tweet ${tweetId}`);
+        clearLoading();
         return;
       }
 
@@ -103,9 +111,14 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
       };
 
       console.log(`[${EXTENSION_NAME}] Sending download-images message`, message);
-      chrome.runtime.sendMessage(message);
+      chrome.runtime.sendMessage(message, (response) => {
+        console.log(`[${EXTENSION_NAME}] Image download response:`, response);
+        // Small delay for UX so the spinner is visible even if local processing is instant
+        setTimeout(clearLoading, 500);
+      });
     } catch (err) {
       console.error(`[${EXTENSION_NAME}] Click handler error:`, err);
+      clearLoading();
     }
   });
 

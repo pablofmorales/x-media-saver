@@ -25,6 +25,36 @@
   color: var(--color-textSecondary, rgb(113, 118, 123));
 }
 
+/* Spinner Animation */
+@keyframes xms-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.xms-spinner {
+  display: none;
+  width: 18.75px;
+  height: 18.75px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: xms-spin 0.75s linear infinite;
+  pointer-events: none;
+}
+
+/* Loading State */
+.xms-save-btn.xms-loading {
+  pointer-events: none;
+}
+
+.xms-save-btn.xms-loading .xms-icon {
+  display: none;
+}
+
+.xms-save-btn.xms-loading .xms-spinner {
+  display: block;
+}
+
 .xms-save-btn:hover {
   background-color: rgba(29, 155, 240, 0.1);
   color: rgb(29, 155, 240);

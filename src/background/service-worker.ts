@@ -144,6 +144,7 @@ chrome.runtime.onMessage.addListener(
       console.log(`[${EXTENSION_NAME}] Received download-images request`, message.images);
       notify("Starting download", `Downloading ${message.images.length} image(s)...`);
       try {
+        let success = false;
         for (const image of message.images) {
           chrome.downloads.download(
             {
@@ -164,11 +165,14 @@ chrome.runtime.onMessage.addListener(
             }
           );
         }
+        sendResponse({ success: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
         notify("Error", msg);
+        sendResponse({ success: false, error: msg });
       }
+      return false; // synchronous sendResponse
     }
 
     if (message.type === "download-video") {
@@ -190,6 +194,7 @@ chrome.runtime.onMessage.addListener(
                 chrome.action.setBadgeText({ text: "" });
               }
             }, 3000);
+            sendResponse({ success: false, error: errMsg });
             return;
           }
 
@@ -204,16 +209,19 @@ chrome.runtime.onMessage.addListener(
                 const err = chrome.runtime.lastError.message ?? "unknown error";
                 console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
                 notify("Error", err);
+                sendResponse({ success: false, error: err });
                 return;
               }
               if (downloadId !== undefined) {
                 trackDownload(downloadId, filename);
+                sendResponse({ success: true });
               } else {
                 const errMsg = `Failed to start download for ${filename}`;
                 console.error(`[${EXTENSION_NAME}] ${errMsg}`);
                 notify("Error", errMsg);
                 chrome.action.setBadgeText({ text: "ERR" });
                 chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+                sendResponse({ success: false, error: errMsg });
               }
             }
           );
@@ -222,7 +230,9 @@ chrome.runtime.onMessage.addListener(
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
           notify("Error", msg);
+          sendResponse({ success: false, error: msg });
         });
+      return true; // async sendResponse
     }
 
     if (message.type === "get-download-status") {
