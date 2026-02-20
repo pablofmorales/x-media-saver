@@ -7,7 +7,7 @@ import type {
 } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
-import { resolveRedditVideoUrl, resolveRedditGalleryUrls } from "./reddit-api";
+import { resolveRedditVideoUrl, resolveRedditGalleryUrls, resolveRedditImageUrl } from "./reddit-api";
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -368,6 +368,65 @@ chrome.runtime.onMessage.addListener(
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[${EXTENSION_NAME}] download-reddit-gallery error: ${msg}`);
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true; // async sendResponse
+    }
+
+    if (message.type === "download-reddit-image") {
+      const { postUrl, subreddit, postId } = message;
+      console.log(`[${EXTENSION_NAME}] Received download-reddit-image request for ${postUrl}`);
+      notify("Starting download", `Resolving Reddit image...`);
+
+      resolveRedditImageUrl(postUrl)
+        .then((imageInfo) => {
+          if (!imageInfo) {
+            const errMsg = `Could not resolve image URL for Reddit post ${postId}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (activeDownloads.size === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          const filename = `r-${subreddit}_${postId}.${imageInfo.extension}`;
+
+          chrome.downloads.download(
+            {
+              url: imageInfo.url,
+              filename,
+              conflictAction: "uniquify",
+            },
+            (downloadId) => {
+              if (chrome.runtime.lastError) {
+                const err = chrome.runtime.lastError.message ?? "unknown error";
+                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                notify("Error", err);
+                sendResponse({ success: false, error: err });
+                return;
+              }
+              if (downloadId !== undefined) {
+                trackDownload(downloadId, filename);
+                sendResponse({ success: true });
+              } else {
+                const errMsg = `Failed to start download for ${filename}`;
+                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+                notify("Error", errMsg);
+                sendResponse({ success: false, error: errMsg });
+              }
+            }
+          );
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-reddit-image error: ${msg}`);
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });

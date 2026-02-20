@@ -58,10 +58,18 @@ export interface RedditGalleryDownloadRequest {
   postId: string;
 }
 
+export interface RedditImageDownloadRequest {
+  type: "download-reddit-image";
+  postUrl: string;
+  subreddit: string;
+  postId: string;
+}
+
 export type MessageRequest =
   | ImageDownloadRequest
   | VideoDownloadRequest
   | RedditVideoDownloadRequest
   | RedditGalleryDownloadRequest
+  | RedditImageDownloadRequest
   | GetDownloadStatusRequest
   | GetDownloadHistoryRequest;
