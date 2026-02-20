@@ -1,1 +1,1 @@
-export const EXTENSION_NAME = "X Media Saver";
+export const EXTENSION_NAME = "Social Media Saver";

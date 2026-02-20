@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "X Media Saver",
-  "version": "0.3.0",
-  "description": "Save media from X (Twitter) posts",
+  "name": "Social Media Saver",
+  "version": "0.4.0",
+  "description": "Save media from X (Twitter) and Reddit posts",
   "permissions": ["downloads", "activeTab", "storage", "notifications"],
   "host_permissions": [
     "https://x.com/*",
@@ -10,7 +10,10 @@
     "https://cdn.syndication.twimg.com/*",
     "https://pbs.twimg.com/*",
     "https://video.twimg.com/*",
-    "https://api.vxtwitter.com/*"
+    "https://api.vxtwitter.com/*",
+    "https://www.reddit.com/*",
+    "https://i.redd.it/*",
+    "https://v.redd.it/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.ts",
@@ -20,6 +23,10 @@
     {
       "matches": ["https://x.com/*", "https://twitter.com/*"],
       "js": ["src/content/index.ts"]
+    },
+    {
+      "matches": ["https://www.reddit.com/*"],
+      "js": ["src/content-reddit/index.ts"]
     }
   ],
   "action": {

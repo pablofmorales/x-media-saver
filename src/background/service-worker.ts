@@ -7,6 +7,7 @@ import type {
 } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
+import { resolveRedditVideoUrl } from "./reddit-api";
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -250,6 +251,64 @@ chrome.runtime.onMessage.addListener(
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true; // async sendResponse
+    }
+
+    if (message.type === "download-reddit-video") {
+      const { postUrl, subreddit, postId } = message;
+      const filename = `r-${subreddit}_${postId}_video.mp4`;
+      console.log(`[${EXTENSION_NAME}] Received download-reddit-video request for ${postUrl}`);
+      notify("Starting download", `Resolving Reddit video...`);
+
+      resolveRedditVideoUrl(postUrl)
+        .then((videoUrl) => {
+          if (!videoUrl) {
+            const errMsg = `Could not resolve video URL for Reddit post ${postId}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (activeDownloads.size === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          chrome.downloads.download(
+            {
+              url: videoUrl,
+              filename,
+              conflictAction: "uniquify",
+            },
+            (downloadId) => {
+              if (chrome.runtime.lastError) {
+                const err = chrome.runtime.lastError.message ?? "unknown error";
+                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                notify("Error", err);
+                sendResponse({ success: false, error: err });
+                return;
+              }
+              if (downloadId !== undefined) {
+                trackDownload(downloadId, filename);
+                sendResponse({ success: true });
+              } else {
+                const errMsg = `Failed to start download for ${filename}`;
+                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+                notify("Error", errMsg);
+                sendResponse({ success: false, error: errMsg });
+              }
+            }
+          );
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-reddit-video error: ${msg}`);
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });

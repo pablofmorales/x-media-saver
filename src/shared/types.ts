@@ -44,8 +44,16 @@ export interface DownloadHistoryResponse {
   entries: DownloadHistoryEntry[];
 }
 
+export interface RedditVideoDownloadRequest {
+  type: "download-reddit-video";
+  postUrl: string;
+  subreddit: string;
+  postId: string;
+}
+
 export type MessageRequest =
   | ImageDownloadRequest
   | VideoDownloadRequest
+  | RedditVideoDownloadRequest
   | GetDownloadStatusRequest
   | GetDownloadHistoryRequest;
