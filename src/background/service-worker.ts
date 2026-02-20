@@ -2,6 +2,8 @@ import type {
   MessageRequest,
   DownloadProgressInfo,
   DownloadStatusResponse,
+  DownloadHistoryEntry,
+  DownloadHistoryResponse,
 } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
@@ -81,6 +83,24 @@ function stopProgressPolling(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Download history persistence
+// ---------------------------------------------------------------------------
+
+const HISTORY_KEY = "downloadHistory";
+const HISTORY_MAX = 10;
+
+async function saveToHistory(
+  downloadId: number,
+  filename: string
+): Promise<void> {
+  const result = await chrome.storage.local.get(HISTORY_KEY);
+  const history = (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
+  history.unshift({ downloadId, filename, completedAt: Date.now() });
+  if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
+  await chrome.storage.local.set({ [HISTORY_KEY]: history });
+}
+
+// ---------------------------------------------------------------------------
 // Download tracking
 // ---------------------------------------------------------------------------
 
@@ -118,6 +138,7 @@ chrome.downloads.onChanged.addListener((delta) => {
       notify("Download finished", meta.filename);
       chrome.action.setBadgeText({ text: "✓" });
       chrome.action.setBadgeBackgroundColor({ color: "#00ba7c" });
+      saveToHistory(delta.id, meta.filename);
       untrackDownload(delta.id);
     }
 
@@ -232,6 +253,14 @@ chrome.runtime.onMessage.addListener(
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
+      return true; // async sendResponse
+    }
+
+    if (message.type === "get-download-history") {
+      chrome.storage.local.get(HISTORY_KEY, (result) => {
+        const entries = (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
+        sendResponse({ entries } satisfies DownloadHistoryResponse);
+      });
       return true; // async sendResponse
     }
 

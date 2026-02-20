@@ -4,12 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>X Media Saver</title>
-    <script type="module" crossorigin src="/assets/popup.html-CAioRaE7.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/popup-DPQte7LO.css">
+    <script type="module" crossorigin src="/assets/popup.html-BrfR5O2_.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/popup-OJem5N78.css">
   </head>
   <body>
-    <h1>X Media Saver</h1>
-    <div id="downloads"></div>
-    <p id="empty-state" class="empty">No active downloads</p>
+    <header class="header">
+      <svg class="header-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+      </svg>
+      <h1 class="header-title">X Media Saver</h1>
+    </header>
+
+    <section id="active-section" class="section" style="display: none">
+      <h2 class="section-title">Active Downloads</h2>
+      <div id="active-downloads"></div>
+    </section>
+
+    <section id="history-section" class="section" style="display: none">
+      <h2 class="section-title">Recent Downloads</h2>
+      <div id="history-downloads"></div>
+    </section>
+
+    <div id="empty-state" class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+      </svg>
+      <p>No downloads yet</p>
+    </div>
+
   </body>
 </html>
