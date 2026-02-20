@@ -337,16 +337,18 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          notify("Downloading", `${galleryImages.length} image(s) from gallery`);
+          // Build filenames for all images
+          const filenames = galleryImages.map(
+            (img, i) => `r-${subreddit}_${postId}_${i + 1}.${img.extension}`
+          );
 
-          for (let i = 0; i < galleryImages.length; i++) {
-            const { url, extension } = galleryImages[i];
-            const filename = `r-${subreddit}_${postId}_${i + 1}.${extension}`;
-
+          // Single-image gallery: just use saveAs directly
+          if (galleryImages.length === 1) {
             chrome.downloads.download(
               {
-                url,
-                filename,
+                url: galleryImages[0].url,
+                filename: filenames[0],
+                saveAs: true,
                 conflictAction: "uniquify",
               },
               (downloadId) => {
@@ -357,11 +359,85 @@ chrome.runtime.onMessage.addListener(
                   return;
                 }
                 if (downloadId !== undefined) {
-                  trackDownload(downloadId, filename);
+                  trackDownload(downloadId, filenames[0]);
                 }
               }
             );
+            sendResponse({ success: true });
+            return;
           }
+
+          // Multi-image gallery: prompt for folder on first image,
+          // then download the rest to the same folder
+          notify("Downloading", `${galleryImages.length} image(s) from gallery — pick a save location`);
+
+          chrome.downloads.download(
+            {
+              url: galleryImages[0].url,
+              filename: filenames[0],
+              saveAs: true,
+              conflictAction: "uniquify",
+            },
+            (firstDownloadId) => {
+              if (chrome.runtime.lastError) {
+                const err = chrome.runtime.lastError.message ?? "unknown error";
+                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                notify("Error", err);
+                return;
+              }
+              if (firstDownloadId === undefined) return;
+
+              trackDownload(firstDownloadId, filenames[0]);
+
+              // Listen for the first download's filename to be determined
+              // (user confirmed Save As dialog) or cancellation
+              const onFirstDownloadChanged = (delta: chrome.downloads.DownloadDelta) => {
+                if (delta.id !== firstDownloadId) return;
+
+                // User cancelled the Save As dialog
+                if (delta.state?.current === "interrupted" || delta.error) {
+                  chrome.downloads.onChanged.removeListener(onFirstDownloadChanged);
+                  notify("Cancelled", "Gallery download cancelled");
+                  return;
+                }
+
+                // Filename determined — extract folder and download remaining images
+                if (delta.filename?.current) {
+                  chrome.downloads.onChanged.removeListener(onFirstDownloadChanged);
+                  const fullPath = delta.filename.current;
+                  const sepIndex = Math.max(fullPath.lastIndexOf("/"), fullPath.lastIndexOf("\\"));
+                  const folder = sepIndex >= 0 ? fullPath.substring(0, sepIndex) : "";
+
+                  for (let i = 1; i < galleryImages.length; i++) {
+                    const remainingFilename = folder
+                      ? `${folder}/${filenames[i]}`
+                      : filenames[i];
+
+                    chrome.downloads.download(
+                      {
+                        url: galleryImages[i].url,
+                        filename: remainingFilename,
+                        conflictAction: "uniquify",
+                      },
+                      (downloadId) => {
+                        if (chrome.runtime.lastError) {
+                          const err = chrome.runtime.lastError.message ?? "unknown error";
+                          console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                          notify("Error", err);
+                          return;
+                        }
+                        if (downloadId !== undefined) {
+                          trackDownload(downloadId, filenames[i]);
+                        }
+                      }
+                    );
+                  }
+                }
+              };
+
+              chrome.downloads.onChanged.addListener(onFirstDownloadChanged);
+            }
+          );
 
           sendResponse({ success: true });
         })
