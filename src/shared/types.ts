@@ -30,7 +30,22 @@ export interface DownloadProgressInfo {
   error?: string;
 }
 
+export interface DownloadHistoryEntry {
+  downloadId: number;
+  filename: string;
+  completedAt: number;
+}
+
+export interface GetDownloadHistoryRequest {
+  type: "get-download-history";
+}
+
+export interface DownloadHistoryResponse {
+  entries: DownloadHistoryEntry[];
+}
+
 export type MessageRequest =
   | ImageDownloadRequest
   | VideoDownloadRequest
-  | GetDownloadStatusRequest;
+  | GetDownloadStatusRequest
+  | GetDownloadHistoryRequest;
