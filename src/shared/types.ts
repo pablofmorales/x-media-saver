@@ -79,6 +79,21 @@ export interface RedditImageDownloadRequest {
   postId: string;
 }
 
+export interface RedditGifDownloadRequest {
+  type: "download-reddit-gif";
+  postUrl: string;
+  subreddit: string;
+  postId: string;
+}
+
+export interface RedditEmbedDownloadRequest {
+  type: "download-reddit-embed";
+  postUrl: string;
+  embedUrl: string;
+  subreddit: string;
+  postId: string;
+}
+
 export interface QueueCancelRequest {
   type: "queue-cancel";
   id: string;
@@ -105,6 +120,8 @@ export type MessageRequest =
   | RedditVideoDownloadRequest
   | RedditGalleryDownloadRequest
   | RedditImageDownloadRequest
+  | RedditGifDownloadRequest
+  | RedditEmbedDownloadRequest
   | GetDownloadStatusRequest
   | GetDownloadHistoryRequest
   | QueueCancelRequest

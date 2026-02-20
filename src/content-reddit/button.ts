@@ -11,6 +11,8 @@ import type {
   RedditVideoDownloadRequest,
   RedditGalleryDownloadRequest,
   RedditImageDownloadRequest,
+  RedditGifDownloadRequest,
+  RedditEmbedDownloadRequest,
 } from "../shared/types";
 
 const BUTTON_ATTR = "data-sms-save-btn";
@@ -78,8 +80,10 @@ function createSaveButton(post: HTMLElement): HTMLElement {
 
       const postUrl = `https://www.reddit.com${meta.permalink}`;
       const hasVideo = media.mediaTypes.includes("video");
+      const hasGif = media.mediaTypes.includes("gif");
       const hasGallery = media.mediaTypes.includes("gallery");
       const hasImage = media.mediaTypes.includes("image");
+      const hasEmbed = media.mediaTypes.includes("embed");
       let pendingResponses = 0;
 
       const onResponse = () => {
@@ -89,7 +93,9 @@ function createSaveButton(post: HTMLElement): HTMLElement {
         }
       };
 
-      // Download video if present
+      // Download video if present (video and gif are sent together;
+      // the background worker tries native video first via download-reddit-video,
+      // and download-reddit-gif handles the GIF fallback)
       if (hasVideo) {
         pendingResponses++;
         const videoMessage: RedditVideoDownloadRequest = {
@@ -98,7 +104,24 @@ function createSaveButton(post: HTMLElement): HTMLElement {
           subreddit: meta.subreddit,
           postId: meta.postId,
         };
-        chrome.runtime.sendMessage(videoMessage, onResponse);
+        // For video posts, try native video first. If it fails (returns
+        // success:false), fall back to GIF resolution.
+        chrome.runtime.sendMessage(
+          videoMessage,
+          (response: { success: boolean }) => {
+            if (!response?.success && hasGif) {
+              const gifMessage: RedditGifDownloadRequest = {
+                type: "download-reddit-gif",
+                postUrl,
+                subreddit: meta.subreddit,
+                postId: meta.postId,
+              };
+              chrome.runtime.sendMessage(gifMessage, onResponse);
+            } else {
+              onResponse();
+            }
+          }
+        );
       }
 
       // Download gallery via API
@@ -125,7 +148,19 @@ function createSaveButton(post: HTMLElement): HTMLElement {
         chrome.runtime.sendMessage(imageMessage, onResponse);
       }
 
-      // If only video was present and no image/gallery, pendingResponses is already set
+      // Download embedded media from external platforms
+      if (hasEmbed && media.embedUrl) {
+        pendingResponses++;
+        const embedMessage: RedditEmbedDownloadRequest = {
+          type: "download-reddit-embed",
+          postUrl,
+          embedUrl: media.embedUrl,
+          subreddit: meta.subreddit,
+          postId: meta.postId,
+        };
+        chrome.runtime.sendMessage(embedMessage, onResponse);
+      }
+
       if (pendingResponses === 0) {
         clearLoading();
       }

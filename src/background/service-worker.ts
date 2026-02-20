@@ -10,7 +10,9 @@ import {
   resolveRedditVideoUrl,
   resolveRedditGalleryUrls,
   resolveRedditImageUrl,
+  resolveRedditGifUrl,
 } from "./reddit-api";
+import { resolveEmbedUrl } from "./embed-resolvers";
 import { DownloadQueue } from "./download-queue";
 
 // ---------------------------------------------------------------------------
@@ -373,6 +375,98 @@ chrome.runtime.onMessage.addListener(
           const msg = err instanceof Error ? err.message : String(err);
           console.error(
             `[${EXTENSION_NAME}] download-reddit-image error: ${msg}`
+          );
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true;
+    }
+
+    if (message.type === "download-reddit-gif") {
+      const { postUrl, subreddit, postId } = message;
+      const filename = `r-${subreddit}_${postId}_gif.mp4`;
+      console.log(
+        `[${EXTENSION_NAME}] Received download-reddit-gif request for ${postUrl}`
+      );
+      notify("Starting download", `Resolving Reddit GIF...`);
+
+      resolveRedditGifUrl(postUrl)
+        .then((gifUrl) => {
+          if (!gifUrl) {
+            const errMsg = `Could not resolve GIF URL for Reddit post ${postId}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (queue.activeCount === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          queue.enqueue(gifUrl, filename, "reddit").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[${EXTENSION_NAME}] download-reddit-gif error: ${msg}`
+          );
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true;
+    }
+
+    if (message.type === "download-reddit-embed") {
+      const { postUrl, embedUrl, subreddit, postId } = message;
+      console.log(
+        `[${EXTENSION_NAME}] Received download-reddit-embed request for ${embedUrl}`
+      );
+      notify("Starting download", `Resolving embedded media...`);
+
+      resolveEmbedUrl(embedUrl)
+        .then((result) => {
+          if (!result) {
+            const errMsg = `Could not resolve embed URL: ${embedUrl}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (queue.activeCount === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          // Determine platform for filename suffix
+          let platform = "embed";
+          try {
+            const hostname = new URL(embedUrl).hostname.replace(/^www\./, "");
+            if (hostname.includes("imgur")) platform = "imgur";
+            else if (hostname.includes("redgifs")) platform = "redgifs";
+          } catch {
+            // keep default
+          }
+
+          const filename = `r-${subreddit}_${postId}_${platform}.${result.extension}`;
+          queue.enqueue(result.url, filename, "reddit").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[${EXTENSION_NAME}] download-reddit-embed error: ${msg}`
           );
           notify("Error", msg);
           sendResponse({ success: false, error: msg });

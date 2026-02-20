@@ -20,14 +20,28 @@ interface RedditGalleryItem {
   id: number;
 }
 
+interface RedditPreviewImage {
+  source: { url: string; width: number; height: number };
+  variants: {
+    mp4?: {
+      source: { url: string; width: number; height: number };
+    };
+  };
+}
+
 interface RedditPostData {
   url?: string;
   url_overridden_by_dest?: string;
+  is_gif?: boolean;
   secure_media?: {
     reddit_video?: RedditVideoData;
   };
   media?: {
     reddit_video?: RedditVideoData;
+  };
+  preview?: {
+    reddit_video_preview?: RedditVideoData;
+    images?: RedditPreviewImage[];
   };
   gallery_data?: {
     items: RedditGalleryItem[];
@@ -155,6 +169,54 @@ export async function resolveRedditImageUrl(
   } catch (err) {
     console.error(
       `[Social Media Saver] Reddit image JSON fetch error for ${postUrl}:`,
+      err
+    );
+    return null;
+  }
+}
+
+export async function resolveRedditGifUrl(
+  postUrl: string
+): Promise<string | null> {
+  const jsonUrl = postUrl.replace(/\/?$/, ".json");
+
+  try {
+    const res = await fetch(jsonUrl, {
+      headers: {
+        "User-Agent": "SocialMediaSaver/1.0",
+      },
+    });
+
+    if (!res.ok) {
+      console.warn(
+        `[Social Media Saver] Reddit JSON API returned ${res.status} for ${postUrl}`
+      );
+      return null;
+    }
+
+    const data: RedditListing[] = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const postData = data[0]?.data?.children?.[0]?.data;
+    if (!postData) return null;
+
+    // Try reddit_video_preview first
+    if (postData.preview?.reddit_video_preview?.fallback_url) {
+      return postData.preview.reddit_video_preview.fallback_url;
+    }
+
+    // Fall back to mp4 variant in preview images
+    const mp4Source =
+      postData.preview?.images?.[0]?.variants?.mp4?.source?.url;
+    if (mp4Source) {
+      return decodeHtmlEntities(mp4Source);
+    }
+
+    return null;
+  } catch (err) {
+    console.error(
+      `[Social Media Saver] Reddit GIF JSON fetch error for ${postUrl}:`,
       err
     );
     return null;

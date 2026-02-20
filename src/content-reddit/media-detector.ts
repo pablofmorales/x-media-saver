@@ -1,9 +1,17 @@
-export type RedditMediaType = "image" | "gallery" | "video";
+export type RedditMediaType = "image" | "gallery" | "video" | "gif" | "embed";
 
 export interface RedditPostMedia {
   element: HTMLElement;
   mediaTypes: RedditMediaType[];
+  embedUrl?: string;
 }
+
+const SUPPORTED_EMBED_DOMAINS = [
+  "imgur.com",
+  "i.imgur.com",
+  "redgifs.com",
+  "www.redgifs.com",
+];
 
 export interface RedditPostMeta {
   subreddit: string;
@@ -29,6 +37,7 @@ export function getAllPostsFromNode(node: Node): HTMLElement[] {
 
 export function detectMedia(post: HTMLElement): RedditPostMedia | null {
   const mediaTypes: RedditMediaType[] = [];
+  let embedUrl: string | undefined;
 
   // Gallery detection — shreddit-post has a `post-type` attribute
   const postType = post.getAttribute("post-type");
@@ -36,13 +45,16 @@ export function detectMedia(post: HTMLElement): RedditPostMedia | null {
     mediaTypes.push("gallery");
   }
 
-  // Video detection
+  // Video detection — also marks as GIF candidate for background worker disambiguation
   if (
     postType === "video" ||
     post.querySelector("shreddit-player") ||
     post.querySelector("video")
   ) {
+    // Posts with post-type="video" may be native videos or GIFs.
+    // Add both — the background worker tries video first, falls back to GIF.
     mediaTypes.push("video");
+    mediaTypes.push("gif");
   }
 
   // Image detection
@@ -56,9 +68,33 @@ export function detectMedia(post: HTMLElement): RedditPostMedia | null {
     }
   }
 
+  // Embed detection — link posts pointing to supported external domains
+  if (postType === "link") {
+    const externalUrl =
+      post.getAttribute("content-href") ||
+      post.getAttribute("url") ||
+      post.getAttribute("href");
+
+    if (externalUrl) {
+      try {
+        const hostname = new URL(externalUrl).hostname.replace(/^www\./, "");
+        const isSupported = SUPPORTED_EMBED_DOMAINS.some((domain) => {
+          const normalized = domain.replace(/^www\./, "");
+          return hostname === normalized || hostname.endsWith(`.${normalized}`);
+        });
+        if (isSupported) {
+          mediaTypes.push("embed");
+          embedUrl = externalUrl;
+        }
+      } catch {
+        // Invalid URL, skip embed detection
+      }
+    }
+  }
+
   if (mediaTypes.length === 0) return null;
 
-  return { element: post, mediaTypes };
+  return { element: post, mediaTypes, embedUrl };
 }
 
 export function getPostMeta(post: HTMLElement): RedditPostMeta | null {
