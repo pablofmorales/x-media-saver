@@ -9,6 +9,7 @@ import type {
   ImageDownloadRequest,
   ImageInfo,
   RedditVideoDownloadRequest,
+  RedditGalleryDownloadRequest,
 } from "../shared/types";
 
 const BUTTON_ATTR = "data-sms-save-btn";
@@ -74,52 +75,68 @@ function createSaveButton(post: HTMLElement): HTMLElement {
         return;
       }
 
+      const postUrl = `https://www.reddit.com${meta.permalink}`;
       const hasVideo = media.mediaTypes.includes("video");
+      const hasGallery = media.mediaTypes.includes("gallery");
+      const hasImage = media.mediaTypes.includes("image");
+      let pendingResponses = 0;
 
+      const onResponse = () => {
+        pendingResponses--;
+        if (pendingResponses <= 0) {
+          setTimeout(clearLoading, 500);
+        }
+      };
+
+      // Download video if present
       if (hasVideo) {
-        const postUrl = `https://www.reddit.com${meta.permalink}`;
-        const message: RedditVideoDownloadRequest = {
+        pendingResponses++;
+        const videoMessage: RedditVideoDownloadRequest = {
           type: "download-reddit-video",
           postUrl,
           subreddit: meta.subreddit,
           postId: meta.postId,
         };
-        chrome.runtime.sendMessage(message, () => {
-          clearLoading();
-        });
-        return;
+        chrome.runtime.sendMessage(videoMessage, onResponse);
       }
 
-      // Images or gallery
-      const imageUrls = extractImageUrls(post);
+      // Download images/gallery if present
+      if (hasGallery || hasImage) {
+        const imageUrls = extractImageUrls(post);
 
-      if (imageUrls.length === 0) {
-        // Gallery — send message to background to fetch via JSON API
-        // For now, try to get gallery images from the DOM
-        console.warn(
-          `[${EXTENSION_NAME}] No image URLs found in DOM for post ${meta.postId}`
-        );
+        if (imageUrls.length > 0) {
+          // DOM extraction succeeded — use download-images
+          pendingResponses++;
+          const images: ImageInfo[] = imageUrls.map((url, index) => {
+            const ext = getImageExtension(url);
+            const n = imageUrls.length > 1 ? `_${index + 1}` : "";
+            return {
+              url,
+              filename: `r-${meta.subreddit}_${meta.postId}${n}.${ext}`,
+            };
+          });
+          const imageMessage: ImageDownloadRequest = {
+            type: "download-images",
+            images,
+          };
+          chrome.runtime.sendMessage(imageMessage, onResponse);
+        } else {
+          // DOM extraction failed — fall back to API-based gallery resolution
+          pendingResponses++;
+          const galleryMessage: RedditGalleryDownloadRequest = {
+            type: "download-reddit-gallery",
+            postUrl,
+            subreddit: meta.subreddit,
+            postId: meta.postId,
+          };
+          chrome.runtime.sendMessage(galleryMessage, onResponse);
+        }
+      }
+
+      // If only video was present and no image/gallery, pendingResponses is already set
+      if (pendingResponses === 0) {
         clearLoading();
-        return;
       }
-
-      const images: ImageInfo[] = imageUrls.map((url, index) => {
-        const ext = getImageExtension(url);
-        const n = imageUrls.length > 1 ? `_${index + 1}` : "";
-        return {
-          url,
-          filename: `r-${meta.subreddit}_${meta.postId}${n}.${ext}`,
-        };
-      });
-
-      const message: ImageDownloadRequest = {
-        type: "download-images",
-        images,
-      };
-
-      chrome.runtime.sendMessage(message, () => {
-        setTimeout(clearLoading, 500);
-      });
     } catch (err) {
       console.error(`[${EXTENSION_NAME}] Click handler error:`, err);
       clearLoading();

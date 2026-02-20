@@ -7,7 +7,7 @@ import type {
 } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
-import { resolveRedditVideoUrl } from "./reddit-api";
+import { resolveRedditVideoUrl, resolveRedditGalleryUrls } from "./reddit-api";
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -309,6 +309,65 @@ chrome.runtime.onMessage.addListener(
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[${EXTENSION_NAME}] download-reddit-video error: ${msg}`);
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true; // async sendResponse
+    }
+
+    if (message.type === "download-reddit-gallery") {
+      const { postUrl, subreddit, postId } = message;
+      console.log(`[${EXTENSION_NAME}] Received download-reddit-gallery request for ${postUrl}`);
+      notify("Starting download", `Resolving Reddit gallery...`);
+
+      resolveRedditGalleryUrls(postUrl)
+        .then((galleryImages) => {
+          if (!galleryImages || galleryImages.length === 0) {
+            const errMsg = `Could not resolve gallery images for Reddit post ${postId}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (activeDownloads.size === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          notify("Downloading", `${galleryImages.length} image(s) from gallery`);
+
+          for (let i = 0; i < galleryImages.length; i++) {
+            const { url, extension } = galleryImages[i];
+            const filename = `r-${subreddit}_${postId}_${i + 1}.${extension}`;
+
+            chrome.downloads.download(
+              {
+                url,
+                filename,
+                conflictAction: "uniquify",
+              },
+              (downloadId) => {
+                if (chrome.runtime.lastError) {
+                  const err = chrome.runtime.lastError.message ?? "unknown error";
+                  console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                  notify("Error", err);
+                  return;
+                }
+                if (downloadId !== undefined) {
+                  trackDownload(downloadId, filename);
+                }
+              }
+            );
+          }
+
+          sendResponse({ success: true });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-reddit-gallery error: ${msg}`);
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
