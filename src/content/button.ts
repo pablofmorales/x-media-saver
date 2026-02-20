@@ -72,8 +72,20 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
       const media = detectMedia(tweet);
       console.log(`[${EXTENSION_NAME}] Detected media:`, media, `username: ${username}`);
       const hasVideo = media?.mediaTypes.includes("video") ?? false;
+      const imageUrls = extractImageUrls(tweet);
+      console.log(`[${EXTENSION_NAME}] Extracted image URLs:`, imageUrls);
+
+      // Track pending responses so loading state covers all downloads
+      let pendingResponses = 0;
+      const onResponse = () => {
+        pendingResponses--;
+        if (pendingResponses <= 0) {
+          setTimeout(clearLoading, 500);
+        }
+      };
 
       if (hasVideo) {
+        pendingResponses++;
         const message: VideoDownloadRequest = {
           type: "download-video",
           tweetId,
@@ -82,40 +94,37 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
         console.log(`[${EXTENSION_NAME}] Sending download-video message`, message);
         chrome.runtime.sendMessage(message, (response) => {
           console.log(`[${EXTENSION_NAME}] Video download response:`, response);
-          clearLoading();
+          onResponse();
         });
-        return;
       }
 
-      const imageUrls = extractImageUrls(tweet);
-      console.log(`[${EXTENSION_NAME}] Extracted image URLs:`, imageUrls);
+      if (imageUrls.length > 0) {
+        pendingResponses++;
+        const images: ImageInfo[] = imageUrls.map((url, index) => {
+          const ext = getImageExtension(url);
+          const n = imageUrls.length > 1 ? `_${index + 1}` : "";
+          return {
+            url,
+            filename: `@${username}_${tweetId}${n}.${ext}`,
+          };
+        });
 
-      if (imageUrls.length === 0) {
+        const message: ImageDownloadRequest = {
+          type: "download-images",
+          images,
+        };
+
+        console.log(`[${EXTENSION_NAME}] Sending download-images message`, message);
+        chrome.runtime.sendMessage(message, (response) => {
+          console.log(`[${EXTENSION_NAME}] Image download response:`, response);
+          onResponse();
+        });
+      }
+
+      if (pendingResponses === 0) {
         console.warn(`[${EXTENSION_NAME}] No media found in tweet ${tweetId}`);
         clearLoading();
-        return;
       }
-
-      const images: ImageInfo[] = imageUrls.map((url, index) => {
-        const ext = getImageExtension(url);
-        const n = imageUrls.length > 1 ? `_${index + 1}` : "";
-        return {
-          url,
-          filename: `@${username}_${tweetId}${n}.${ext}`,
-        };
-      });
-
-      const message: ImageDownloadRequest = {
-        type: "download-images",
-        images,
-      };
-
-      console.log(`[${EXTENSION_NAME}] Sending download-images message`, message);
-      chrome.runtime.sendMessage(message, (response) => {
-        console.log(`[${EXTENSION_NAME}] Image download response:`, response);
-        // Small delay for UX so the spinner is visible even if local processing is instant
-        setTimeout(clearLoading, 500);
-      });
     } catch (err) {
       console.error(`[${EXTENSION_NAME}] Click handler error:`, err);
       clearLoading();
