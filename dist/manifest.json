@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "X Media Saver",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Save media from X (Twitter) posts",
   "permissions": [
     "downloads",
     "activeTab",
-    "storage"
+    "storage",
+    "notifications"
   ],
   "host_permissions": [
     "https://x.com/*",
@@ -23,7 +24,7 @@
   "content_scripts": [
     {
       "js": [
-        "assets/index.ts-CA_UZtqV.js"
+        "assets/index.ts-loader-cNldrJDu.js"
       ],
       "matches": [
         "https://x.com/*",
@@ -44,7 +45,8 @@
         "https://x.com/*"
       ],
       "resources": [
-        "assets/index.ts-CA_UZtqV.js"
+        "assets/constants-DEZdbWmU.js",
+        "assets/index.ts-U1WvrF9H.js"
       ],
       "use_dynamic_url": false
     }

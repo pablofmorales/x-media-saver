@@ -3,7 +3,21 @@ import type {
   DownloadProgressInfo,
   DownloadStatusResponse,
 } from "../shared/types";
+import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
+
+// ---------------------------------------------------------------------------
+// Notification helper
+// ---------------------------------------------------------------------------
+
+function notify(title: string, message: string): void {
+  chrome.notifications.create({
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("icon.png"),
+    title: `${EXTENSION_NAME}: ${title}`,
+    message,
+  });
+}
 
 /** Active downloads being tracked: downloadId → metadata */
 const activeDownloads = new Map<number, { filename: string }>();
@@ -100,7 +114,8 @@ chrome.downloads.onChanged.addListener((delta) => {
     const meta = activeDownloads.get(delta.id)!;
 
     if (delta.state.current === "complete") {
-      console.log(`[X Media Saver] Download complete: ${meta.filename}`);
+      console.log(`[${EXTENSION_NAME}] Download complete: ${meta.filename}`);
+      notify("Download finished", meta.filename);
       chrome.action.setBadgeText({ text: "✓" });
       chrome.action.setBadgeBackgroundColor({ color: "#00ba7c" });
       untrackDownload(delta.id);
@@ -109,8 +124,9 @@ chrome.downloads.onChanged.addListener((delta) => {
     if (delta.state.current === "interrupted") {
       const errorMsg = delta.error?.current ?? "unknown error";
       console.error(
-        `[X Media Saver] Download failed: ${meta.filename} — ${errorMsg}`
+        `[${EXTENSION_NAME}] Download failed: ${meta.filename} — ${errorMsg}`
       );
+      notify("Error", `${meta.filename} — ${errorMsg}`);
       chrome.action.setBadgeText({ text: "ERR" });
       chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
       untrackDownload(delta.id);
@@ -125,60 +141,88 @@ chrome.downloads.onChanged.addListener((delta) => {
 chrome.runtime.onMessage.addListener(
   (message: MessageRequest, _sender, sendResponse) => {
     if (message.type === "download-images") {
-      for (const image of message.images) {
-        chrome.downloads.download(
-          {
-            url: image.url,
-            filename: image.filename,
-            conflictAction: "uniquify",
-          },
-          (downloadId) => {
-            if (downloadId !== undefined) {
-              trackDownload(downloadId, image.filename);
+      console.log(`[${EXTENSION_NAME}] Received download-images request`, message.images);
+      notify("Starting download", `Downloading ${message.images.length} image(s)...`);
+      try {
+        for (const image of message.images) {
+          chrome.downloads.download(
+            {
+              url: image.url,
+              filename: image.filename,
+              conflictAction: "uniquify",
+            },
+            (downloadId) => {
+              if (chrome.runtime.lastError) {
+                const err = chrome.runtime.lastError.message ?? "unknown error";
+                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                notify("Error", err);
+                return;
+              }
+              if (downloadId !== undefined) {
+                trackDownload(downloadId, image.filename);
+              }
             }
-          }
-        );
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
+        notify("Error", msg);
       }
     }
 
     if (message.type === "download-video") {
       const { tweetId, username } = message;
       const filename = `@${username}_${tweetId}_video.mp4`;
+      console.log(`[${EXTENSION_NAME}] Received download-video request for tweet ${tweetId}`);
+      notify("Starting download", `Resolving video for tweet ${tweetId}...`);
 
-      resolveVideoUrl(tweetId).then((videoUrl) => {
-        if (!videoUrl) {
-          console.error(
-            `[X Media Saver] Could not resolve video URL for tweet ${tweetId}`
-          );
-          chrome.action.setBadgeText({ text: "ERR" });
-          chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-          setTimeout(() => {
-            if (activeDownloads.size === 0) {
-              chrome.action.setBadgeText({ text: "" });
-            }
-          }, 3000);
-          return;
-        }
-
-        chrome.downloads.download(
-          {
-            url: videoUrl,
-            filename,
-            conflictAction: "uniquify",
-          },
-          (downloadId) => {
-            if (downloadId !== undefined) {
-              trackDownload(downloadId, filename);
-            } else {
-              console.error(
-                `[X Media Saver] Failed to start download for ${filename}`
-              );
-              chrome.action.setBadgeText({ text: "ERR" });
-              chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-            }
+      resolveVideoUrl(tweetId)
+        .then((videoUrl) => {
+          if (!videoUrl) {
+            const errMsg = `Could not resolve video URL for tweet ${tweetId}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            notify("Error", errMsg);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            setTimeout(() => {
+              if (activeDownloads.size === 0) {
+                chrome.action.setBadgeText({ text: "" });
+              }
+            }, 3000);
+            return;
           }
-        );
-      });
+
+          chrome.downloads.download(
+            {
+              url: videoUrl,
+              filename,
+              conflictAction: "uniquify",
+            },
+            (downloadId) => {
+              if (chrome.runtime.lastError) {
+                const err = chrome.runtime.lastError.message ?? "unknown error";
+                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                notify("Error", err);
+                return;
+              }
+              if (downloadId !== undefined) {
+                trackDownload(downloadId, filename);
+              } else {
+                const errMsg = `Failed to start download for ${filename}`;
+                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+                notify("Error", errMsg);
+                chrome.action.setBadgeText({ text: "ERR" });
+                chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+              }
+            }
+          );
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
+          notify("Error", msg);
+        });
     }
 
     if (message.type === "get-download-status") {

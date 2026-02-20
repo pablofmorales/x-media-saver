@@ -1,21 +1,35 @@
 {
   "../../../../@crx/manifest": {
-    "file": "assets/crx-manifest.js-CD4613a9.js",
+    "file": "assets/crx-manifest.js-C6BJIvaW.js",
     "name": "crx-manifest.js",
     "src": "../../../../@crx/manifest",
     "isEntry": true
   },
+  "_constants-DEZdbWmU.js": {
+    "file": "assets/constants-DEZdbWmU.js",
+    "name": "constants"
+  },
+  "_index.ts-loader-cNldrJDu.js": {
+    "file": "assets/index.ts-loader-cNldrJDu.js",
+    "src": "_index.ts-loader-cNldrJDu.js"
+  },
   "src/background/service-worker.ts": {
-    "file": "assets/service-worker.ts-DDGslDEv.js",
+    "file": "assets/service-worker.ts-DRDZY3MZ.js",
     "name": "service-worker.ts",
     "src": "src/background/service-worker.ts",
-    "isEntry": true
+    "isEntry": true,
+    "imports": [
+      "_constants-DEZdbWmU.js"
+    ]
   },
   "src/content/index.ts": {
-    "file": "assets/index.ts-CA_UZtqV.js",
+    "file": "assets/index.ts-U1WvrF9H.js",
     "name": "index.ts",
     "src": "src/content/index.ts",
     "isEntry": true,
+    "imports": [
+      "_constants-DEZdbWmU.js"
+    ],
     "css": [
       "assets/index-XXjE9lLt.css"
     ]

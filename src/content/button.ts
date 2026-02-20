@@ -61,42 +61,52 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
     e.preventDefault();
     e.stopPropagation();
 
-    const username = getUsername(tweet) ?? "unknown";
-    const media = detectMedia(tweet);
-    const hasVideo = media?.mediaTypes.includes("video") ?? false;
+    console.log(`[${EXTENSION_NAME}] Save button clicked for tweet ${tweetId}`);
 
-    if (hasVideo) {
-      const message: VideoDownloadRequest = {
-        type: "download-video",
-        tweetId,
-        username,
+    try {
+      const username = getUsername(tweet) ?? "unknown";
+      const media = detectMedia(tweet);
+      console.log(`[${EXTENSION_NAME}] Detected media:`, media, `username: ${username}`);
+      const hasVideo = media?.mediaTypes.includes("video") ?? false;
+
+      if (hasVideo) {
+        const message: VideoDownloadRequest = {
+          type: "download-video",
+          tweetId,
+          username,
+        };
+        console.log(`[${EXTENSION_NAME}] Sending download-video message`, message);
+        chrome.runtime.sendMessage(message);
+        return;
+      }
+
+      const imageUrls = extractImageUrls(tweet);
+      console.log(`[${EXTENSION_NAME}] Extracted image URLs:`, imageUrls);
+
+      if (imageUrls.length === 0) {
+        console.warn(`[${EXTENSION_NAME}] No media found in tweet ${tweetId}`);
+        return;
+      }
+
+      const images: ImageInfo[] = imageUrls.map((url, index) => {
+        const ext = getImageExtension(url);
+        const n = imageUrls.length > 1 ? `_${index + 1}` : "";
+        return {
+          url,
+          filename: `@${username}_${tweetId}${n}.${ext}`,
+        };
+      });
+
+      const message: ImageDownloadRequest = {
+        type: "download-images",
+        images,
       };
+
+      console.log(`[${EXTENSION_NAME}] Sending download-images message`, message);
       chrome.runtime.sendMessage(message);
-      return;
+    } catch (err) {
+      console.error(`[${EXTENSION_NAME}] Click handler error:`, err);
     }
-
-    const imageUrls = extractImageUrls(tweet);
-
-    if (imageUrls.length === 0) {
-      console.warn(`[${EXTENSION_NAME}] No media found in tweet ${tweetId}`);
-      return;
-    }
-
-    const images: ImageInfo[] = imageUrls.map((url, index) => {
-      const ext = getImageExtension(url);
-      const n = imageUrls.length > 1 ? `_${index + 1}` : "";
-      return {
-        url,
-        filename: `@${username}_${tweetId}${n}.${ext}`,
-      };
-    });
-
-    const message: ImageDownloadRequest = {
-      type: "download-images",
-      images,
-    };
-
-    chrome.runtime.sendMessage(message);
   });
 
   container.appendChild(button);

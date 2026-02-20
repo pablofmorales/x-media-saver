@@ -36,40 +36,56 @@ function pickBestMp4(variants: VideoVariant[]): string | null {
 
 async function fetchFromSyndication(tweetId: string): Promise<string | null> {
   const url = `https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-
-  const data: SyndicationResponse = await res.json();
-  if (!data.mediaDetails) return null;
-
-  for (const media of data.mediaDetails) {
-    if (
-      (media.type === "video" || media.type === "animated_gif") &&
-      media.video_info?.variants
-    ) {
-      const best = pickBestMp4(media.video_info.variants);
-      if (best) return best;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`[X Media Saver] Syndication API returned ${res.status} for tweet ${tweetId}`);
+      return null;
     }
-  }
 
-  return null;
+    const data: SyndicationResponse = await res.json();
+    if (!data.mediaDetails) return null;
+
+    for (const media of data.mediaDetails) {
+      if (
+        (media.type === "video" || media.type === "animated_gif") &&
+        media.video_info?.variants
+      ) {
+        const best = pickBestMp4(media.video_info.variants);
+        if (best) return best;
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error(`[X Media Saver] Syndication fetch error for tweet ${tweetId}:`, err);
+    return null;
+  }
 }
 
 async function fetchFromVxTwitter(tweetId: string): Promise<string | null> {
   const url = `https://api.vxtwitter.com/Twitter/status/${tweetId}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-
-  const data: VxTwitterResponse = await res.json();
-  if (!data.media_extended) return null;
-
-  for (const media of data.media_extended) {
-    if ((media.type === "video" || media.type === "gif") && media.url) {
-      return media.url;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`[X Media Saver] VxTwitter API returned ${res.status} for tweet ${tweetId}`);
+      return null;
     }
-  }
 
-  return null;
+    const data: VxTwitterResponse = await res.json();
+    if (!data.media_extended) return null;
+
+    for (const media of data.media_extended) {
+      if ((media.type === "video" || media.type === "gif") && media.url) {
+        return media.url;
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error(`[X Media Saver] VxTwitter fetch error for tweet ${tweetId}:`, err);
+    return null;
+  }
 }
 
 export async function resolveVideoUrl(tweetId: string): Promise<string | null> {
