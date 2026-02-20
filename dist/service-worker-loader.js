@@ -1,1 +1,1 @@
-import './assets/service-worker.ts-HOUoQ_od.js';
+import './assets/service-worker.ts-DDGslDEv.js';

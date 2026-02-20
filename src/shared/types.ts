@@ -8,4 +8,29 @@ export interface ImageInfo {
   filename: string;
 }
 
-export type MessageRequest = ImageDownloadRequest;
+export interface VideoDownloadRequest {
+  type: "download-video";
+  tweetId: string;
+  username: string;
+}
+
+export interface GetDownloadStatusRequest {
+  type: "get-download-status";
+}
+
+export interface DownloadStatusResponse {
+  downloads: DownloadProgressInfo[];
+}
+
+export interface DownloadProgressInfo {
+  id: number;
+  filename: string;
+  progress: number; // 0-100
+  state: "in_progress" | "complete" | "interrupted";
+  error?: string;
+}
+
+export type MessageRequest =
+  | ImageDownloadRequest
+  | VideoDownloadRequest
+  | GetDownloadStatusRequest;

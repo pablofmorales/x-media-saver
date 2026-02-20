@@ -1,10 +1,15 @@
 import { EXTENSION_NAME } from "../shared/constants";
 import {
+  detectMedia,
   extractImageUrls,
   getImageExtension,
   getUsername,
 } from "./media-detector";
-import type { ImageDownloadRequest, ImageInfo } from "../shared/types";
+import type {
+  ImageDownloadRequest,
+  ImageInfo,
+  VideoDownloadRequest,
+} from "../shared/types";
 
 const BUTTON_ATTR = "data-xms-save-btn";
 
@@ -57,10 +62,23 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
     e.stopPropagation();
 
     const username = getUsername(tweet) ?? "unknown";
+    const media = detectMedia(tweet);
+    const hasVideo = media?.mediaTypes.includes("video") ?? false;
+
+    if (hasVideo) {
+      const message: VideoDownloadRequest = {
+        type: "download-video",
+        tweetId,
+        username,
+      };
+      chrome.runtime.sendMessage(message);
+      return;
+    }
+
     const imageUrls = extractImageUrls(tweet);
 
     if (imageUrls.length === 0) {
-      console.warn(`[${EXTENSION_NAME}] No images found in tweet ${tweetId}`);
+      console.warn(`[${EXTENSION_NAME}] No media found in tweet ${tweetId}`);
       return;
     }
 
