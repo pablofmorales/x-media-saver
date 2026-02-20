@@ -1,3 +1,15 @@
+export interface QueueEntry {
+  id: string;
+  url: string;
+  filename: string;
+  status: "queued" | "downloading" | "paused" | "completed" | "failed";
+  chromeDownloadId?: number;
+  retryCount: number;
+  error?: string;
+  addedAt: number;
+  source: "twitter" | "reddit";
+}
+
 export interface ImageDownloadRequest {
   type: "download-images";
   images: ImageInfo[];
@@ -20,6 +32,8 @@ export interface GetDownloadStatusRequest {
 
 export interface DownloadStatusResponse {
   downloads: DownloadProgressInfo[];
+  entries: QueueEntry[];
+  queuePaused: boolean;
 }
 
 export interface DownloadProgressInfo {
@@ -65,6 +79,26 @@ export interface RedditImageDownloadRequest {
   postId: string;
 }
 
+export interface QueueCancelRequest {
+  type: "queue-cancel";
+  id: string;
+}
+
+export interface QueueRetryRequest {
+  type: "queue-retry";
+  id: string;
+}
+
+export interface QueuePauseRequest {
+  type: "queue-pause";
+  id?: string;
+}
+
+export interface QueueResumeRequest {
+  type: "queue-resume";
+  id?: string;
+}
+
 export type MessageRequest =
   | ImageDownloadRequest
   | VideoDownloadRequest
@@ -72,4 +106,8 @@ export type MessageRequest =
   | RedditGalleryDownloadRequest
   | RedditImageDownloadRequest
   | GetDownloadStatusRequest
-  | GetDownloadHistoryRequest;
+  | GetDownloadHistoryRequest
+  | QueueCancelRequest
+  | QueueRetryRequest
+  | QueuePauseRequest
+  | QueueResumeRequest;

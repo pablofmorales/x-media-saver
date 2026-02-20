@@ -1,13 +1,17 @@
 import type {
   MessageRequest,
-  DownloadProgressInfo,
   DownloadStatusResponse,
   DownloadHistoryEntry,
   DownloadHistoryResponse,
 } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
-import { resolveRedditVideoUrl, resolveRedditGalleryUrls, resolveRedditImageUrl } from "./reddit-api";
+import {
+  resolveRedditVideoUrl,
+  resolveRedditGalleryUrls,
+  resolveRedditImageUrl,
+} from "./reddit-api";
+import { DownloadQueue } from "./download-queue";
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -22,53 +26,73 @@ function notify(title: string, message: string): void {
   });
 }
 
-/** Active downloads being tracked: downloadId → metadata */
-const activeDownloads = new Map<number, { filename: string }>();
+// ---------------------------------------------------------------------------
+// Download queue instance
+// ---------------------------------------------------------------------------
 
-/** Polling interval handle for progress updates */
-let progressInterval: ReturnType<typeof setInterval> | null = null;
+const queue = new DownloadQueue();
 
-const POLL_MS = 500;
+// Restore queue state on service worker startup
+queue.restore();
 
 // ---------------------------------------------------------------------------
 // Badge helpers
 // ---------------------------------------------------------------------------
 
+const POLL_MS = 500;
+let progressInterval: ReturnType<typeof setInterval> | null = null;
+
 function updateBadge(): void {
-  if (activeDownloads.size === 0) {
+  if (queue.activeCount === 0 && queue.queuedCount === 0) {
     chrome.action.setBadgeText({ text: "" });
     return;
   }
 
-  // Query all tracked downloads to compute aggregate progress
-  const ids = [...activeDownloads.keys()];
-  chrome.downloads.search({ id: ids[0] }, () => {
-    // Search each tracked download individually so we can aggregate
-    let totalBytes = 0;
-    let receivedBytes = 0;
-    let pending = ids.length;
+  // Show queued count if nothing is actively downloading
+  if (queue.activeCount === 0 && queue.queuedCount > 0) {
+    chrome.action.setBadgeText({ text: `${queue.queuedCount}` });
+    chrome.action.setBadgeBackgroundColor({ color: "#71767b" });
+    return;
+  }
 
-    for (const id of ids) {
-      chrome.downloads.search({ id }, (results) => {
-        if (results && results.length > 0) {
-          const item = results[0];
-          if (item.totalBytes > 0) {
-            totalBytes += item.totalBytes;
-            receivedBytes += item.bytesReceived;
-          }
+  // Aggregate progress of downloading entries
+  const { entries } = queue.getStatus();
+  const downloading = entries.filter((e) => e.status === "downloading");
+  const ids = downloading
+    .map((e) => e.chromeDownloadId)
+    .filter((id): id is number => id !== undefined);
+
+  if (ids.length === 0) {
+    chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+
+  let totalBytes = 0;
+  let receivedBytes = 0;
+  let pending = ids.length;
+
+  for (const id of ids) {
+    chrome.downloads.search({ id }, (results) => {
+      if (results && results.length > 0) {
+        const item = results[0];
+        if (item.totalBytes > 0) {
+          totalBytes += item.totalBytes;
+          receivedBytes += item.bytesReceived;
         }
-        pending--;
-        if (pending === 0) {
-          const pct =
-            totalBytes > 0
-              ? Math.round((receivedBytes / totalBytes) * 100)
-              : 0;
-          chrome.action.setBadgeText({ text: `${pct}%` });
-          chrome.action.setBadgeBackgroundColor({ color: "#1d9bf0" });
-        }
-      });
-    }
-  });
+      }
+      pending--;
+      if (pending === 0) {
+        const pct =
+          totalBytes > 0
+            ? Math.round((receivedBytes / totalBytes) * 100)
+            : 0;
+        const queuedSuffix =
+          queue.queuedCount > 0 ? `+${queue.queuedCount}` : "";
+        chrome.action.setBadgeText({ text: `${pct}%${queuedSuffix}` });
+        chrome.action.setBadgeBackgroundColor({ color: "#1d9bf0" });
+      }
+    });
+  }
 }
 
 function startProgressPolling(): void {
@@ -83,6 +107,20 @@ function stopProgressPolling(): void {
   }
 }
 
+function refreshPolling(): void {
+  if (queue.activeCount > 0 || queue.queuedCount > 0) {
+    startProgressPolling();
+  } else {
+    stopProgressPolling();
+    setTimeout(() => {
+      if (queue.activeCount === 0 && queue.queuedCount === 0) {
+        chrome.action.setBadgeText({ text: "" });
+      }
+    }, 1500);
+  }
+  updateBadge();
+}
+
 // ---------------------------------------------------------------------------
 // Download history persistence
 // ---------------------------------------------------------------------------
@@ -95,63 +133,48 @@ async function saveToHistory(
   filename: string
 ): Promise<void> {
   const result = await chrome.storage.local.get(HISTORY_KEY);
-  const history = (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
+  const history =
+    (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
   history.unshift({ downloadId, filename, completedAt: Date.now() });
   if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
   await chrome.storage.local.set({ [HISTORY_KEY]: history });
 }
 
 // ---------------------------------------------------------------------------
-// Download tracking
-// ---------------------------------------------------------------------------
-
-function trackDownload(downloadId: number, filename: string): void {
-  activeDownloads.set(downloadId, { filename });
-  startProgressPolling();
-  updateBadge();
-}
-
-function untrackDownload(downloadId: number): void {
-  activeDownloads.delete(downloadId);
-  if (activeDownloads.size === 0) {
-    stopProgressPolling();
-    // Clear badge after a short delay so user can see 100%
-    setTimeout(() => {
-      if (activeDownloads.size === 0) {
-        chrome.action.setBadgeText({ text: "" });
-      }
-    }, 1500);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// chrome.downloads.onChanged — detect completion and errors
+// chrome.downloads.onChanged — route events to queue
 // ---------------------------------------------------------------------------
 
 chrome.downloads.onChanged.addListener((delta) => {
-  if (!activeDownloads.has(delta.id)) return;
+  const entry = queue.findByChromeId(delta.id);
+  if (!entry) return;
 
   if (delta.state) {
-    const meta = activeDownloads.get(delta.id)!;
-
     if (delta.state.current === "complete") {
-      console.log(`[${EXTENSION_NAME}] Download complete: ${meta.filename}`);
-      notify("Download finished", meta.filename);
-      chrome.action.setBadgeText({ text: "✓" });
+      console.log(
+        `[${EXTENSION_NAME}] Download complete: ${entry.filename}`
+      );
+      notify("Download finished", entry.filename);
+      chrome.action.setBadgeText({ text: "\u2713" });
       chrome.action.setBadgeBackgroundColor({ color: "#00ba7c" });
-      saveToHistory(delta.id, meta.filename);
-      untrackDownload(delta.id);
+      saveToHistory(delta.id, entry.filename);
+      queue.onDownloadComplete(delta.id).then(() => refreshPolling());
     }
 
     if (delta.state.current === "interrupted") {
       const errorMsg = delta.error?.current ?? "unknown error";
       console.error(
-        `[${EXTENSION_NAME}] Download failed: ${meta.filename} — ${errorMsg}`
+        `[${EXTENSION_NAME}] Download failed: ${entry.filename} — ${errorMsg}`
       );
-      notify("Error", `${meta.filename} — ${errorMsg}`);
-      chrome.action.setBadgeText({ text: "ERR" });
-      chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-      untrackDownload(delta.id);
+      queue
+        .onDownloadInterrupted(delta.id, errorMsg)
+        .then((updatedEntry) => {
+          if (updatedEntry && updatedEntry.status === "failed") {
+            notify("Error", `${entry.filename} — ${errorMsg}`);
+            chrome.action.setBadgeText({ text: "ERR" });
+            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+          }
+          refreshPolling();
+        });
     }
   }
 });
@@ -163,29 +186,19 @@ chrome.downloads.onChanged.addListener((delta) => {
 chrome.runtime.onMessage.addListener(
   (message: MessageRequest, _sender, sendResponse) => {
     if (message.type === "download-images") {
-      console.log(`[${EXTENSION_NAME}] Received download-images request`, message.images);
-      notify("Starting download", `Downloading ${message.images.length} image(s)...`);
+      console.log(
+        `[${EXTENSION_NAME}] Received download-images request`,
+        message.images
+      );
+      notify(
+        "Starting download",
+        `Downloading ${message.images.length} image(s)...`
+      );
       try {
-        let success = false;
         for (const image of message.images) {
-          chrome.downloads.download(
-            {
-              url: image.url,
-              filename: image.filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                return;
-              }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, image.filename);
-              }
-            }
-          );
+          queue.enqueue(image.url, image.filename, "twitter").then(() => {
+            refreshPolling();
+          });
         }
         sendResponse({ success: true });
       } catch (err) {
@@ -194,14 +207,19 @@ chrome.runtime.onMessage.addListener(
         notify("Error", msg);
         sendResponse({ success: false, error: msg });
       }
-      return false; // synchronous sendResponse
+      return false;
     }
 
     if (message.type === "download-video") {
       const { tweetId, username } = message;
       const filename = `@${username}_${tweetId}_video.mp4`;
-      console.log(`[${EXTENSION_NAME}] Received download-video request for tweet ${tweetId}`);
-      notify("Starting download", `Resolving video for tweet ${tweetId}...`);
+      console.log(
+        `[${EXTENSION_NAME}] Received download-video request for tweet ${tweetId}`
+      );
+      notify(
+        "Starting download",
+        `Resolving video for tweet ${tweetId}...`
+      );
 
       resolveVideoUrl(tweetId)
         .then((videoUrl) => {
@@ -212,7 +230,7 @@ chrome.runtime.onMessage.addListener(
             chrome.action.setBadgeText({ text: "ERR" });
             chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
             setTimeout(() => {
-              if (activeDownloads.size === 0) {
+              if (queue.activeCount === 0) {
                 chrome.action.setBadgeText({ text: "" });
               }
             }, 3000);
@@ -220,47 +238,28 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          chrome.downloads.download(
-            {
-              url: videoUrl,
-              filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                sendResponse({ success: false, error: err });
-                return;
-              }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, filename);
-                sendResponse({ success: true });
-              } else {
-                const errMsg = `Failed to start download for ${filename}`;
-                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
-                notify("Error", errMsg);
-                chrome.action.setBadgeText({ text: "ERR" });
-                chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-                sendResponse({ success: false, error: errMsg });
-              }
-            }
-          );
+          queue.enqueue(videoUrl, filename, "twitter").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
+          console.error(
+            `[${EXTENSION_NAME}] download-video error: ${msg}`
+          );
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
-      return true; // async sendResponse
+      return true;
     }
 
     if (message.type === "download-reddit-video") {
       const { postUrl, subreddit, postId } = message;
       const filename = `r-${subreddit}_${postId}_video.mp4`;
-      console.log(`[${EXTENSION_NAME}] Received download-reddit-video request for ${postUrl}`);
+      console.log(
+        `[${EXTENSION_NAME}] Received download-reddit-video request for ${postUrl}`
+      );
       notify("Starting download", `Resolving Reddit video...`);
 
       resolveRedditVideoUrl(postUrl)
@@ -272,7 +271,7 @@ chrome.runtime.onMessage.addListener(
             chrome.action.setBadgeText({ text: "ERR" });
             chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
             setTimeout(() => {
-              if (activeDownloads.size === 0) {
+              if (queue.activeCount === 0) {
                 chrome.action.setBadgeText({ text: "" });
               }
             }, 3000);
@@ -280,48 +279,31 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          chrome.downloads.download(
-            {
-              url: videoUrl,
-              filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                sendResponse({ success: false, error: err });
-                return;
-              }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, filename);
-                sendResponse({ success: true });
-              } else {
-                const errMsg = `Failed to start download for ${filename}`;
-                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
-                notify("Error", errMsg);
-                sendResponse({ success: false, error: errMsg });
-              }
-            }
-          );
+          queue.enqueue(videoUrl, filename, "reddit").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${EXTENSION_NAME}] download-reddit-video error: ${msg}`);
+          console.error(
+            `[${EXTENSION_NAME}] download-reddit-video error: ${msg}`
+          );
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
-      return true; // async sendResponse
+      return true;
     }
 
     if (message.type === "download-reddit-gallery") {
       const { postUrl, subreddit, postId } = message;
-      console.log(`[${EXTENSION_NAME}] Received download-reddit-gallery request for ${postUrl}`);
+      console.log(
+        `[${EXTENSION_NAME}] Received download-reddit-gallery request for ${postUrl}`
+      );
       notify("Starting download", `Resolving Reddit gallery...`);
 
       resolveRedditGalleryUrls(postUrl)
-        .then((galleryImages) => {
+        .then(async (galleryImages) => {
           if (!galleryImages || galleryImages.length === 0) {
             const errMsg = `Could not resolve gallery images for Reddit post ${postId}`;
             console.error(`[${EXTENSION_NAME}] ${errMsg}`);
@@ -329,7 +311,7 @@ chrome.runtime.onMessage.addListener(
             chrome.action.setBadgeText({ text: "ERR" });
             chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
             setTimeout(() => {
-              if (activeDownloads.size === 0) {
+              if (queue.activeCount === 0) {
                 chrome.action.setBadgeText({ text: "" });
               }
             }, 3000);
@@ -337,122 +319,31 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          // Build filenames for all images
-          const filenames = galleryImages.map(
-            (img, i) => `r-${subreddit}_${postId}_${i + 1}.${img.extension}`
-          );
-
-          // Single-image gallery: just use saveAs directly
-          if (galleryImages.length === 1) {
-            chrome.downloads.download(
-              {
-                url: galleryImages[0].url,
-                filename: filenames[0],
-                saveAs: true,
-                conflictAction: "uniquify",
-              },
-              (downloadId) => {
-                if (chrome.runtime.lastError) {
-                  const err = chrome.runtime.lastError.message ?? "unknown error";
-                  console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                  notify("Error", err);
-                  return;
-                }
-                if (downloadId !== undefined) {
-                  trackDownload(downloadId, filenames[0]);
-                }
-              }
-            );
-            sendResponse({ success: true });
-            return;
+          for (let i = 0; i < galleryImages.length; i++) {
+            const img = galleryImages[i];
+            const filename = `r-${subreddit}_${postId}_${i + 1}.${img.extension}`;
+            await queue.enqueue(img.url, filename, "reddit");
           }
 
-          // Multi-image gallery: prompt for folder on first image,
-          // then download the rest to the same folder
-          notify("Downloading", `${galleryImages.length} image(s) from gallery — pick a save location`);
-
-          chrome.downloads.download(
-            {
-              url: galleryImages[0].url,
-              filename: filenames[0],
-              saveAs: true,
-              conflictAction: "uniquify",
-            },
-            (firstDownloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                return;
-              }
-              if (firstDownloadId === undefined) return;
-
-              trackDownload(firstDownloadId, filenames[0]);
-
-              // Listen for the first download's filename to be determined
-              // (user confirmed Save As dialog) or cancellation
-              const onFirstDownloadChanged = (delta: chrome.downloads.DownloadDelta) => {
-                if (delta.id !== firstDownloadId) return;
-
-                // User cancelled the Save As dialog
-                if (delta.state?.current === "interrupted" || delta.error) {
-                  chrome.downloads.onChanged.removeListener(onFirstDownloadChanged);
-                  notify("Cancelled", "Gallery download cancelled");
-                  return;
-                }
-
-                // Filename determined — extract folder and download remaining images
-                if (delta.filename?.current) {
-                  chrome.downloads.onChanged.removeListener(onFirstDownloadChanged);
-                  const fullPath = delta.filename.current;
-                  const sepIndex = Math.max(fullPath.lastIndexOf("/"), fullPath.lastIndexOf("\\"));
-                  const folder = sepIndex >= 0 ? fullPath.substring(0, sepIndex) : "";
-
-                  for (let i = 1; i < galleryImages.length; i++) {
-                    const remainingFilename = folder
-                      ? `${folder}/${filenames[i]}`
-                      : filenames[i];
-
-                    chrome.downloads.download(
-                      {
-                        url: galleryImages[i].url,
-                        filename: remainingFilename,
-                        conflictAction: "uniquify",
-                      },
-                      (downloadId) => {
-                        if (chrome.runtime.lastError) {
-                          const err = chrome.runtime.lastError.message ?? "unknown error";
-                          console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                          notify("Error", err);
-                          return;
-                        }
-                        if (downloadId !== undefined) {
-                          trackDownload(downloadId, filenames[i]);
-                        }
-                      }
-                    );
-                  }
-                }
-              };
-
-              chrome.downloads.onChanged.addListener(onFirstDownloadChanged);
-            }
-          );
-
+          refreshPolling();
           sendResponse({ success: true });
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${EXTENSION_NAME}] download-reddit-gallery error: ${msg}`);
+          console.error(
+            `[${EXTENSION_NAME}] download-reddit-gallery error: ${msg}`
+          );
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
-      return true; // async sendResponse
+      return true;
     }
 
     if (message.type === "download-reddit-image") {
       const { postUrl, subreddit, postId } = message;
-      console.log(`[${EXTENSION_NAME}] Received download-reddit-image request for ${postUrl}`);
+      console.log(
+        `[${EXTENSION_NAME}] Received download-reddit-image request for ${postUrl}`
+      );
       notify("Starting download", `Resolving Reddit image...`);
 
       resolveRedditImageUrl(postUrl)
@@ -464,7 +355,7 @@ chrome.runtime.onMessage.addListener(
             chrome.action.setBadgeText({ text: "ERR" });
             chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
             setTimeout(() => {
-              if (activeDownloads.size === 0) {
+              if (queue.activeCount === 0) {
                 chrome.action.setBadgeText({ text: "" });
               }
             }, 3000);
@@ -473,85 +364,109 @@ chrome.runtime.onMessage.addListener(
           }
 
           const filename = `r-${subreddit}_${postId}.${imageInfo.extension}`;
-
-          chrome.downloads.download(
-            {
-              url: imageInfo.url,
-              filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                sendResponse({ success: false, error: err });
-                return;
-              }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, filename);
-                sendResponse({ success: true });
-              } else {
-                const errMsg = `Failed to start download for ${filename}`;
-                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
-                notify("Error", errMsg);
-                sendResponse({ success: false, error: errMsg });
-              }
-            }
-          );
+          queue.enqueue(imageInfo.url, filename, "reddit").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${EXTENSION_NAME}] download-reddit-image error: ${msg}`);
+          console.error(
+            `[${EXTENSION_NAME}] download-reddit-image error: ${msg}`
+          );
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
-      return true; // async sendResponse
+      return true;
     }
 
     if (message.type === "get-download-history") {
       chrome.storage.local.get(HISTORY_KEY, (result) => {
-        const entries = (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
+        const entries =
+          (result[HISTORY_KEY] as DownloadHistoryEntry[] | undefined) ?? [];
         sendResponse({ entries } satisfies DownloadHistoryResponse);
       });
-      return true; // async sendResponse
+      return true;
     }
 
     if (message.type === "get-download-status") {
-      // Async response — gather progress for all active downloads
-      const ids = [...activeDownloads.keys()];
-      if (ids.length === 0) {
-        sendResponse({ downloads: [] } satisfies DownloadStatusResponse);
+      const { entries, queuePaused } = queue.getStatus();
+
+      // Enrich entries that are downloading with progress from chrome.downloads
+      const downloading = entries.filter(
+        (e) =>
+          e.status === "downloading" && e.chromeDownloadId !== undefined
+      );
+
+      if (downloading.length === 0) {
+        sendResponse({
+          downloads: [],
+          entries,
+          queuePaused,
+        } satisfies DownloadStatusResponse);
         return false;
       }
 
-      let pending = ids.length;
-      const infos: DownloadProgressInfo[] = [];
-
-      for (const id of ids) {
-        chrome.downloads.search({ id }, (results) => {
-          if (results && results.length > 0) {
-            const item = results[0];
-            const meta = activeDownloads.get(id);
-            infos.push({
-              id,
-              filename: meta?.filename ?? item.filename,
-              progress:
+      let pending = downloading.length;
+      for (const entry of downloading) {
+        chrome.downloads.search(
+          { id: entry.chromeDownloadId! },
+          (results) => {
+            if (results && results.length > 0) {
+              const item = results[0];
+              // Attach progress as a transient property via casting
+              (entry as any).progress =
                 item.totalBytes > 0
-                  ? Math.round((item.bytesReceived / item.totalBytes) * 100)
-                  : 0,
-              state: item.state as DownloadProgressInfo["state"],
-              error: item.error,
-            });
+                  ? Math.round(
+                      (item.bytesReceived / item.totalBytes) * 100
+                    )
+                  : 0;
+            }
+            pending--;
+            if (pending === 0) {
+              sendResponse({
+                downloads: [],
+                entries,
+                queuePaused,
+              } satisfies DownloadStatusResponse);
+            }
           }
-          pending--;
-          if (pending === 0) {
-            sendResponse({ downloads: infos } satisfies DownloadStatusResponse);
-          }
-        });
+        );
       }
+      return true;
+    }
 
-      return true; // keep message channel open for async sendResponse
+    // Queue control messages
+    if (message.type === "queue-cancel") {
+      queue.cancel(message.id).then(() => {
+        refreshPolling();
+        sendResponse({ success: true });
+      });
+      return true;
+    }
+
+    if (message.type === "queue-retry") {
+      queue.retry(message.id).then(() => {
+        refreshPolling();
+        sendResponse({ success: true });
+      });
+      return true;
+    }
+
+    if (message.type === "queue-pause") {
+      queue.pause(message.id).then(() => {
+        refreshPolling();
+        sendResponse({ success: true });
+      });
+      return true;
+    }
+
+    if (message.type === "queue-resume") {
+      queue.resume(message.id).then(() => {
+        refreshPolling();
+        sendResponse({ success: true });
+      });
+      return true;
     }
   }
 );

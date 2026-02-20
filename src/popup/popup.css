@@ -152,6 +152,109 @@ body {
   flex-shrink: 0;
 }
 
+/* Download card header (filename + actions) */
+.download-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.download-card-header .download-filename {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.download-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Queue control buttons */
+.queue-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid #2f3336;
+  border-radius: 6px;
+  color: #71767b;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.queue-btn:hover {
+  background: rgba(239, 243, 244, 0.1);
+  border-color: #536471;
+  color: #e7e9ea;
+}
+
+.queue-btn-cancel:hover {
+  background: rgba(244, 33, 46, 0.1);
+  border-color: rgba(244, 33, 46, 0.3);
+  color: #f4212e;
+}
+
+.queue-btn-retry:hover {
+  background: rgba(29, 155, 240, 0.1);
+  border-color: rgba(29, 155, 240, 0.3);
+  color: #1d9bf0;
+}
+
+.queue-btn-pause:hover {
+  background: rgba(255, 212, 0, 0.1);
+  border-color: rgba(255, 212, 0, 0.3);
+  color: #ffd400;
+}
+
+.queue-btn-resume:hover {
+  background: rgba(0, 186, 124, 0.1);
+  border-color: rgba(0, 186, 124, 0.3);
+  color: #00ba7c;
+}
+
+/* Global toggle button */
+.global-toggle {
+  width: 100%;
+  height: auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.global-toggle.queue-btn-pause {
+  color: #ffd400;
+  border-color: rgba(255, 212, 0, 0.3);
+}
+
+.global-toggle.queue-btn-resume {
+  color: #00ba7c;
+  border-color: rgba(0, 186, 124, 0.3);
+}
+
+/* Queue position text */
+.queue-position {
+  color: #71767b;
+  font-style: italic;
+}
+
+/* Error status text */
+.error-status {
+  color: #f4212e;
+}
+
+/* Paused progress fill */
+.progress-fill.paused {
+  background: #ffd400;
+}
+
 /* Empty state */
 .empty-state {
   display: flex;
