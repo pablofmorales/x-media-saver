@@ -10,6 +10,7 @@ import type {
   ImageInfo,
   RedditVideoDownloadRequest,
   RedditGalleryDownloadRequest,
+  RedditImageDownloadRequest,
 } from "../shared/types";
 
 const BUTTON_ATTR = "data-sms-save-btn";
@@ -100,37 +101,28 @@ function createSaveButton(post: HTMLElement): HTMLElement {
         chrome.runtime.sendMessage(videoMessage, onResponse);
       }
 
-      // Download images/gallery if present
-      if (hasGallery || hasImage) {
-        const imageUrls = extractImageUrls(post);
+      // Download gallery via API
+      if (hasGallery) {
+        pendingResponses++;
+        const galleryMessage: RedditGalleryDownloadRequest = {
+          type: "download-reddit-gallery",
+          postUrl,
+          subreddit: meta.subreddit,
+          postId: meta.postId,
+        };
+        chrome.runtime.sendMessage(galleryMessage, onResponse);
+      }
 
-        if (imageUrls.length > 0) {
-          // DOM extraction succeeded — use download-images
-          pendingResponses++;
-          const images: ImageInfo[] = imageUrls.map((url, index) => {
-            const ext = getImageExtension(url);
-            const n = imageUrls.length > 1 ? `_${index + 1}` : "";
-            return {
-              url,
-              filename: `r-${meta.subreddit}_${meta.postId}${n}.${ext}`,
-            };
-          });
-          const imageMessage: ImageDownloadRequest = {
-            type: "download-images",
-            images,
-          };
-          chrome.runtime.sendMessage(imageMessage, onResponse);
-        } else {
-          // DOM extraction failed — fall back to API-based gallery resolution
-          pendingResponses++;
-          const galleryMessage: RedditGalleryDownloadRequest = {
-            type: "download-reddit-gallery",
-            postUrl,
-            subreddit: meta.subreddit,
-            postId: meta.postId,
-          };
-          chrome.runtime.sendMessage(galleryMessage, onResponse);
-        }
+      // Download single image via API (handles NSFW blur correctly)
+      if (hasImage && !hasGallery) {
+        pendingResponses++;
+        const imageMessage: RedditImageDownloadRequest = {
+          type: "download-reddit-image",
+          postUrl,
+          subreddit: meta.subreddit,
+          postId: meta.postId,
+        };
+        chrome.runtime.sendMessage(imageMessage, onResponse);
       }
 
       // If only video was present and no image/gallery, pendingResponses is already set

@@ -21,6 +21,8 @@ interface RedditGalleryItem {
 }
 
 interface RedditPostData {
+  url?: string;
+  url_overridden_by_dest?: string;
   secure_media?: {
     reddit_video?: RedditVideoData;
   };
@@ -105,6 +107,58 @@ function extensionFromMime(mime: string): string {
     "image/webp": "webp",
   };
   return map[mime] || "jpg";
+}
+
+export interface RedditImageInfo {
+  url: string;
+  extension: string;
+}
+
+export async function resolveRedditImageUrl(
+  postUrl: string
+): Promise<RedditImageInfo | null> {
+  const jsonUrl = postUrl.replace(/\/?$/, ".json");
+
+  try {
+    const res = await fetch(jsonUrl, {
+      headers: {
+        "User-Agent": "SocialMediaSaver/1.0",
+      },
+    });
+
+    if (!res.ok) {
+      console.warn(
+        `[Social Media Saver] Reddit JSON API returned ${res.status} for ${postUrl}`
+      );
+      return null;
+    }
+
+    const data: RedditListing[] = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const postData = data[0]?.data?.children?.[0]?.data;
+    if (!postData) return null;
+
+    const imageUrl = postData.url_overridden_by_dest || postData.url;
+    if (!imageUrl || !imageUrl.includes("i.redd.it")) return null;
+
+    // Extract extension from URL
+    const extMatch = imageUrl.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i);
+    const extension = extMatch
+      ? extMatch[1].toLowerCase() === "jpeg"
+        ? "jpg"
+        : extMatch[1].toLowerCase()
+      : "jpg";
+
+    return { url: imageUrl, extension };
+  } catch (err) {
+    console.error(
+      `[Social Media Saver] Reddit image JSON fetch error for ${postUrl}:`,
+      err
+    );
+    return null;
+  }
 }
 
 export async function resolveRedditGalleryUrls(
