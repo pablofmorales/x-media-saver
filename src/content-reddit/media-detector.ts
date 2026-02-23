@@ -105,14 +105,18 @@ export function getPostMeta(post: HTMLElement): RedditPostMeta | null {
   if (!permalink) return null;
 
   // Permalink format: /r/{subreddit}/comments/{postId}/...
+  // or user profile: /user/{username}/comments/{postId}/...
   const match = permalink.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
-  if (!match) return null;
+  if (match) {
+    return { subreddit: match[1], postId: match[2], permalink };
+  }
 
-  return {
-    subreddit: match[1],
-    postId: match[2],
-    permalink,
-  };
+  const userMatch = permalink.match(/\/user\/([^/]+)\/comments\/([^/]+)/);
+  if (userMatch) {
+    return { subreddit: `u_${userMatch[1]}`, postId: userMatch[2], permalink };
+  }
+
+  return null;
 }
 
 export function extractImageUrls(post: HTMLElement): string[] {
