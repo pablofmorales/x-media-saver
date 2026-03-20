@@ -1,3 +1,15 @@
+import { DEFAULT_SETTINGS, DownloadQuality, UserSettings } from "../shared/types";
+
+let currentSettings = DEFAULT_SETTINGS;
+chrome.storage.sync.get({ settings: DEFAULT_SETTINGS }, (res) => {
+  currentSettings = res.settings as UserSettings;
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.settings) {
+    currentSettings = changes.settings.newValue as UserSettings;
+  }
+});
+
 const SELECTORS = {
   tweet: 'article[data-testid="tweet"]',
   tweetPhoto: '[data-testid="tweetPhoto"]',
@@ -84,7 +96,7 @@ export function extractImageUrls(tweet: HTMLElement): string[] {
     const img = container.querySelector<HTMLImageElement>("img[src]");
     if (!img) continue;
 
-    const url = toOriginalQuality(img.src);
+    const url = toQuality(img.src, currentSettings.quality);
     if (url) urls.push(url);
   }
 
@@ -95,11 +107,11 @@ export function extractImageUrls(tweet: HTMLElement): string[] {
  * Convert an X image URL to original quality by setting name=orig.
  * Returns the cleaned URL or null if it's not a recognized image URL.
  */
-function toOriginalQuality(src: string): string | null {
+function toQuality(src: string, quality: DownloadQuality): string | null {
   try {
     const url = new URL(src);
     if (!url.hostname.includes("twimg.com")) return null;
-    url.searchParams.set("name", "orig");
+    url.searchParams.set("name", quality);
     return url.toString();
   } catch {
     return null;

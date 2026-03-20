@@ -9,13 +9,87 @@ import type {
   QueueRetryRequest,
   QueuePauseRequest,
   QueueResumeRequest,
+  UserSettings,
 } from "../shared/types";
+import { DEFAULT_SETTINGS } from "../shared/types";
 
 const activeSection = document.getElementById("active-section")!;
 const activeContainer = document.getElementById("active-downloads")!;
 const historySection = document.getElementById("history-section")!;
 const historyContainer = document.getElementById("history-downloads")!;
 const emptyState = document.getElementById("empty-state")!;
+
+// Tab Elements
+const tabBtns = document.querySelectorAll(".tab-btn");
+const tabContents = document.querySelectorAll(".tab-content");
+
+// Settings Elements
+const qualitySelect = document.getElementById("setting-quality") as HTMLSelectElement;
+const subfolderInput = document.getElementById("setting-subfolder") as HTMLInputElement;
+const themeSelect = document.getElementById("setting-theme") as HTMLSelectElement;
+const saveSettingsBtn = document.getElementById("save-settings-btn") as HTMLButtonElement;
+const settingsStatus = document.getElementById("settings-status")!;
+const versionBadge = document.getElementById("version-badge")!;
+
+// Set version dynamically
+versionBadge.textContent = "v" + chrome.runtime.getManifest().version;
+
+// ---------------------------------------------------------------------------
+// Tabs & Settings
+// ---------------------------------------------------------------------------
+
+tabBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    // Remove active class
+    tabBtns.forEach((b) => b.classList.remove("active"));
+    tabContents.forEach((c) => c.classList.remove("active"));
+    
+    // Add active class
+    btn.classList.add("active");
+    const tabId = btn.getAttribute("data-tab");
+    document.getElementById(`tab-${tabId}`)!.classList.add("active");
+  });
+});
+
+function loadSettings() {
+  chrome.storage.sync.get({ settings: DEFAULT_SETTINGS }, (result) => {
+    const settings = result.settings as UserSettings;
+    qualitySelect.value = settings.quality;
+    subfolderInput.value = settings.subfolder;
+    themeSelect.value = settings.theme;
+    
+    applyTheme(settings.theme);
+  });
+}
+
+function applyTheme(theme: string) {
+  if (theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    document.documentElement.style.setProperty("color-scheme", "dark");
+  } else {
+    document.documentElement.style.setProperty("color-scheme", "light");
+  }
+}
+
+saveSettingsBtn.addEventListener("click", () => {
+  const newSettings: UserSettings = {
+    quality: qualitySelect.value as UserSettings["quality"],
+    subfolder: subfolderInput.value.trim(),
+    theme: themeSelect.value as UserSettings["theme"],
+  };
+
+  chrome.storage.sync.set({ settings: newSettings }, () => {
+    settingsStatus.textContent = "Settings saved successfully!";
+    applyTheme(newSettings.theme);
+    
+    // Clear message after 3 seconds
+    setTimeout(() => {
+      settingsStatus.textContent = "";
+    }, 3000);
+  });
+});
+
+// Initialize settings
+loadSettings();
 
 // ---------------------------------------------------------------------------
 // Relative time formatting

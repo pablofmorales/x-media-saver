@@ -3,7 +3,9 @@ import type {
   DownloadStatusResponse,
   DownloadHistoryEntry,
   DownloadHistoryResponse,
+  UserSettings,
 } from "../shared/types";
+import { DEFAULT_SETTINGS } from "../shared/types";
 import { EXTENSION_NAME } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
 import {
@@ -14,6 +16,27 @@ import {
 } from "./reddit-api";
 import { resolveEmbedUrl } from "./embed-resolvers";
 import { DownloadQueue } from "./download-queue";
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+let currentSettings: UserSettings = DEFAULT_SETTINGS;
+chrome.storage.sync.get({ settings: DEFAULT_SETTINGS }, (res) => {
+  currentSettings = res.settings as UserSettings;
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.settings) {
+    currentSettings = changes.settings.newValue as UserSettings;
+  }
+});
+
+function applySubfolder(filename: string): string {
+  if (!currentSettings.subfolder || currentSettings.subfolder.trim() === "") {
+    return filename;
+  }
+  return `${currentSettings.subfolder.trim()}/${filename}`;
+}
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -205,7 +228,7 @@ chrome.runtime.onMessage.addListener(
       );
       try {
         for (const image of message.images) {
-          queue.enqueue(image.url, image.filename, "twitter").then(() => {
+          queue.enqueue(image.url, applySubfolder(image.filename), "twitter").then(() => {
             refreshPolling();
           });
         }
@@ -247,7 +270,7 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          queue.enqueue(videoUrl, filename, "twitter").then(() => {
+          queue.enqueue(videoUrl, applySubfolder(filename), "twitter").then(() => {
             refreshPolling();
             sendResponse({ success: true });
           });
@@ -288,7 +311,7 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          queue.enqueue(videoUrl, filename, "reddit").then(() => {
+          queue.enqueue(videoUrl, applySubfolder(filename), "reddit").then(() => {
             refreshPolling();
             sendResponse({ success: true });
           });
@@ -331,7 +354,7 @@ chrome.runtime.onMessage.addListener(
           for (let i = 0; i < galleryImages.length; i++) {
             const img = galleryImages[i];
             const filename = `r-${subreddit}_${postId}_${i + 1}.${img.extension}`;
-            await queue.enqueue(img.url, filename, "reddit");
+            await queue.enqueue(img.url, applySubfolder(filename), "reddit");
           }
 
           refreshPolling();
@@ -373,7 +396,7 @@ chrome.runtime.onMessage.addListener(
           }
 
           const filename = `r-${subreddit}_${postId}.${imageInfo.extension}`;
-          queue.enqueue(imageInfo.url, filename, "reddit").then(() => {
+          queue.enqueue(imageInfo.url, applySubfolder(filename), "reddit").then(() => {
             refreshPolling();
             sendResponse({ success: true });
           });
@@ -414,7 +437,7 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          queue.enqueue(gifUrl, filename, "reddit").then(() => {
+          queue.enqueue(gifUrl, applySubfolder(filename), "reddit").then(() => {
             refreshPolling();
             sendResponse({ success: true });
           });
@@ -465,7 +488,7 @@ chrome.runtime.onMessage.addListener(
           }
 
           const filename = `r-${subreddit}_${postId}_${platform}.${result.extension}`;
-          queue.enqueue(result.url, filename, "reddit").then(() => {
+          queue.enqueue(result.url, applySubfolder(filename), "reddit").then(() => {
             refreshPolling();
             sendResponse({ success: true });
           });

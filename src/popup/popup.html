@@ -8,27 +8,68 @@
   </head>
   <body>
     <header class="header">
-      <svg class="header-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
-      </svg>
-      <h1 class="header-title">X Media Saver</h1>
+      <div class="header-left">
+        <svg class="header-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+        </svg>
+        <h1 class="header-title">Social Media Saver <span class="version-badge" id="version-badge">v0.4.0</span></h1>
+      </div>
     </header>
 
-    <section id="active-section" class="section" style="display: none">
-      <h2 class="section-title">Active Downloads</h2>
-      <div id="active-downloads"></div>
-    </section>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="downloads">Downloads</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </div>
 
-    <section id="history-section" class="section" style="display: none">
-      <h2 class="section-title">Recent Downloads</h2>
-      <div id="history-downloads"></div>
-    </section>
+    <div id="tab-downloads" class="tab-content active">
+      <section id="active-section" class="section" style="display: none">
+        <h2 class="section-title">Active Downloads</h2>
+        <div id="active-downloads"></div>
+      </section>
 
-    <div id="empty-state" class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
-        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
-      </svg>
-      <p>No downloads yet</p>
+      <section id="history-section" class="section" style="display: none">
+        <h2 class="section-title">Recent Downloads</h2>
+        <div id="history-downloads"></div>
+      </section>
+
+      <div id="empty-state" class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+          <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+        </svg>
+        <p>No downloads yet</p>
+      </div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+      <div class="settings-form">
+        <div class="form-group">
+          <label for="setting-quality">Image Quality</label>
+          <select id="setting-quality" class="form-control">
+            <option value="orig">Original (Highest, uncompressed)</option>
+            <option value="large">Large (High quality)</option>
+            <option value="medium">Medium (Faster download)</option>
+          </select>
+          <div class="help-text">Does not affect video resolution (always maximum).</div>
+        </div>
+
+        <div class="form-group">
+          <label for="setting-subfolder">Download Subfolder</label>
+          <input type="text" id="setting-subfolder" class="form-control" placeholder="SocialMediaSaver" />
+          <div class="help-text">Files will be saved to <code>Downloads/&lt;subfolder&gt;/</code>. Leave blank to save directly to Downloads.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="setting-theme">Theme</label>
+          <select id="setting-theme" class="form-control">
+            <option value="system">System Default</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+
+        <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+        <div id="settings-status" class="status-msg"></div>
+      </div>
     </div>
 
     <script type="module" src="popup.ts"></script>

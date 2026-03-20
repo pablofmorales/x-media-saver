@@ -291,3 +291,101 @@ body::-webkit-scrollbar-thumb {
 body::-webkit-scrollbar-thumb:hover {
   background: #3e4246;
 }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background-color: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 16px;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn:hover {
+  color: var(--text-color);
+}
+.tab-btn.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+
+/* Settings Form */
+.settings-form {
+  padding: 16px;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.form-control:focus {
+  border-color: var(--accent-color);
+  outline: none;
+}
+.help-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+.btn-primary {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+}
+.btn-primary:hover {
+  opacity: 0.9;
+}
+.status-msg {
+  font-size: 12px;
+  margin-top: 8px;
+  color: var(--success-color);
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.version-badge {
+  font-size: 10px;
+  background-color: var(--border-color);
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-weight: normal;
+  vertical-align: middle;
+}
