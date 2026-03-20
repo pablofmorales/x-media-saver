@@ -6,7 +6,11 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, aang]
+    # Security fix #22: moved from self-hosted runner ('aang') to ubuntu-latest.
+    # This is a public repo — running CI on a self-hosted runner means a
+    # contributor with a compromised account could execute code on the homelab.
+    # GitHub-hosted runners are ephemeral and isolated.
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout

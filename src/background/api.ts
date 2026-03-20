@@ -77,6 +77,19 @@ async function fetchFromVxTwitter(tweetId: string): Promise<string | null> {
 
     for (const media of data.media_extended) {
       if ((media.type === "video" || media.type === "gif") && media.url) {
+        // Security fix #23: validate URL scheme before returning.
+        // vxtwitter could theoretically return a file:// or javascript: URL.
+        // Only allow https: URLs to reach chrome.downloads.
+        try {
+          const parsed = new URL(media.url);
+          if (parsed.protocol !== "https:") {
+            console.warn(`[X Media Saver] Rejected non-HTTPS URL from vxtwitter: ${media.url}`);
+            continue;
+          }
+        } catch {
+          console.warn(`[X Media Saver] Rejected invalid URL from vxtwitter: ${media.url}`);
+          continue;
+        }
         return media.url;
       }
     }
