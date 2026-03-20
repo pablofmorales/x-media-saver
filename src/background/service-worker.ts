@@ -186,7 +186,14 @@ chrome.downloads.onChanged.addListener((delta) => {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener(
-  (message: MessageRequest, _sender, sendResponse) => {
+  (message: MessageRequest, sender, sendResponse) => {
+    // Security fix #24: only handle messages from this extension's own content
+    // scripts. Without this check, any content script in any tab can trigger
+    // downloads by sending a crafted message to the extension runtime.
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
     if (message.type === "download-images") {
       console.log(
         `[${EXTENSION_NAME}] Received download-images request`,
