@@ -1,22 +1,18 @@
-# X Media Saver
+# Social Media Saver
 
-A Chrome extension that adds a download button to X (Twitter) posts, letting you save images and videos with a single click.
+A Chrome extension that adds a download button to X (Twitter) posts so you can save images and videos with one click.
 
-## Features
+## Install
 
-- **One-click download** — Adds a save button to every tweet's action bar
-- **Full-quality images** — Downloads images at original resolution (`?name=orig`)
-- **Video support** — Resolves and downloads the highest-bitrate MP4 variant
-- **All media at once** — Downloads both images and video from mixed-media tweets in a single click
-- **Download progress** — Badge icon shows real-time download percentage
-- **Download history** — Popup shows recent downloads with the option to open files in your file manager
-- **Desktop notifications** — Notifies you when downloads complete or encounter errors
+### From the Chrome Web Store
 
-## Installation
+*(Coming soon)*
 
-1. Clone the repository:
+### From source
+
+1. Clone the repo:
    ```bash
-   git clone https://github.com/blackasteroid/x-media-saver.git
+   git clone https://github.com/pablofmorales/x-media-saver.git
    cd x-media-saver
    ```
 
@@ -32,60 +28,57 @@ A Chrome extension that adds a download button to X (Twitter) posts, letting you
 
 4. Load in Chrome:
    - Open `chrome://extensions/`
-   - Enable **Developer mode** (top right)
+   - Enable **Developer mode** (top right toggle)
    - Click **Load unpacked**
    - Select the `dist/` folder
 
-## Development
+## What it does
 
-Start the Vite dev server with hot reload:
+- Downloads images at full resolution (`?name=orig`)
+- Resolves and downloads the highest-bitrate MP4 for videos
+- Handles tweets with both images and video in one click
+- Shows download progress on the extension badge
+- Keeps a history of recent downloads in the popup, with a button to open each file
+- Sends a desktop notification when a download finishes or fails
+
+## Development
 
 ```bash
 npm run dev
 ```
 
-Then load the `dist/` folder as an unpacked extension in Chrome. Changes to source files will trigger a rebuild automatically.
-
-Build for production:
+This starts the Vite dev server with hot reload. Load the `dist/` folder as an unpacked extension in Chrome — changes to source files trigger a rebuild automatically.
 
 ```bash
 npm run build
 ```
 
-This runs TypeScript type-checking (`tsc`) followed by a Vite production build.
+Runs TypeScript type-checking (`tsc`) then a Vite production build.
 
-## Architecture
+## How it works
 
-The extension runs across three isolated Chrome extension contexts that communicate via `chrome.runtime.sendMessage`:
+The extension has three parts that communicate via `chrome.runtime.sendMessage`:
 
 ```
-Content Script (x.com)          Background Service Worker         Popup
-┌──────────────────────┐       ┌──────────────────────┐       ┌──────────────┐
-│ Observes DOM for     │       │ Handles download     │       │ Polls for    │
-│ new tweets           │──────▶│ requests             │◀──────│ active       │
-│                      │       │                      │       │ downloads &  │
-│ Detects media        │       │ Resolves video URLs  │       │ history      │
-│ (images/video)       │       │ via Twitter APIs     │       │              │
-│                      │       │                      │       │ Shows        │
-│ Injects download     │       │ Tracks progress      │       │ progress     │
-│ buttons              │       │ & history            │       │ bars         │
-└──────────────────────┘       └──────────────────────┘       └──────────────┘
+Content Script (x.com)     Background Service Worker     Popup
+┌─────────────────────┐    ┌──────────────────────┐    ┌──────────────┐
+│ Watches DOM for     │    │ Handles download     │    │ Shows active │
+│ new tweets          │───▶│ requests             │◀───│ downloads &  │
+│                     │    │                      │    │ history      │
+│ Detects media and   │    │ Resolves video URLs  │    │              │
+│ injects download    │    │ Tracks progress      │    │              │
+│ buttons             │    │ & history            │    │              │
+└─────────────────────┘    └──────────────────────┘    └──────────────┘
 ```
 
-### Content Script (`src/content/`)
+**Content script** (`src/content/`) — injected into x.com and twitter.com. Uses a `MutationObserver` to detect new tweets, extracts media URLs, and injects a download button into each tweet's action bar.
 
-Injected into x.com and twitter.com pages. Uses a `MutationObserver` to detect new tweets in the DOM, extracts media URLs, and injects a download button into each tweet's action bar. On click, sends `download-images` and/or `download-video` messages to the background worker.
+**Background service worker** (`src/background/`) — handles the actual downloads via `chrome.downloads.download()`. For videos, it resolves the MP4 URL through a dual-API fallback (Twitter Syndication API, then VxTwitter). Tracks progress, updates the badge, persists history to `chrome.storage.local`, and sends notifications.
 
-### Background Service Worker (`src/background/`)
+**Popup** (`src/popup/`) — shown when you click the extension icon. Polls the background worker for download status and recent history, displaying progress bars and file info.
 
-Handles download requests using `chrome.downloads.download()`. For videos, resolves the actual MP4 URL via a dual-API fallback strategy (Twitter Syndication API, then VxTwitter API). Tracks download progress, updates the extension badge, persists download history to `chrome.storage.local`, and sends desktop notifications.
+## Tech stack
 
-### Popup (`src/popup/`)
-
-Shown when clicking the extension icon. Polls the background worker for active download status and recent history, displaying progress bars and file information in a dark-themed UI matching X's design.
-
-## Tech Stack
-
-- **TypeScript** — Strict mode, ESNext target
-- **Vite** — Build tooling with `@crxjs/vite-plugin` for Chrome extension support
-- **Chrome Extension Manifest V3** — Service workers, content scripts, storage API
+- TypeScript (strict mode, ESNext target)
+- Vite with `@crxjs/vite-plugin` for Chrome extension support
+- Chrome Extension Manifest V3
