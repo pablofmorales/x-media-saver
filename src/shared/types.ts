@@ -128,3 +128,17 @@ export type MessageRequest =
   | QueueRetryRequest
   | QueuePauseRequest
   | QueueResumeRequest;
+
+export type DownloadQuality = "orig" | "large" | "medium";
+
+export interface UserSettings {
+  quality: DownloadQuality;
+  subfolder: string;
+  theme: "system" | "dark" | "light";
+}
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  quality: "orig",
+  subfolder: "SocialMediaSaver",
+  theme: "system",
+};
