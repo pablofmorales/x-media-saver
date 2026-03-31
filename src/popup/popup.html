@@ -31,6 +31,19 @@
       <p>No downloads yet</p>
     </div>
 
+    <section class="section settings-section">
+      <h2 class="section-title">Settings</h2>
+      <div class="settings-row">
+        <label class="settings-label" for="folder-input">Download folder</label>
+        <div class="settings-input-row">
+          <input type="text" id="folder-input" class="settings-input" placeholder="e.g. x-media" />
+          <button id="folder-save" class="settings-save-btn">Save</button>
+        </div>
+        <div class="settings-hint">Subfolder inside your Downloads directory</div>
+        <div id="folder-status" class="settings-status" style="display: none"></div>
+      </div>
+    </section>
+
     <script type="module" src="popup.ts"></script>
   </body>
 </html>

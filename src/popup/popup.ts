@@ -10,6 +10,7 @@ import type {
   QueuePauseRequest,
   QueueResumeRequest,
 } from "../shared/types";
+import { loadDownloadFolder, saveDownloadFolder } from "../shared/folder-config";
 
 const activeSection = document.getElementById("active-section")!;
 const activeContainer = document.getElementById("active-downloads")!;
@@ -331,7 +332,32 @@ function fetchHistory(): void {
   });
 }
 
-// Initial fetch
+// ---------------------------------------------------------------------------
+// Settings: download folder
+// ---------------------------------------------------------------------------
+
+const folderInput = document.getElementById("folder-input") as HTMLInputElement;
+const folderSaveBtn = document.getElementById("folder-save")!;
+const folderStatus = document.getElementById("folder-status")!;
+
+loadDownloadFolder().then((folder) => {
+  folderInput.value = folder;
+});
+
+folderSaveBtn.addEventListener("click", async () => {
+  const saved = await saveDownloadFolder(folderInput.value);
+  folderInput.value = saved;
+  folderStatus.textContent = saved ? `Saving to: Downloads/${saved}/` : "Using default Downloads folder";
+  folderStatus.style.display = "";
+  setTimeout(() => {
+    folderStatus.style.display = "none";
+  }, 3000);
+});
+
+// ---------------------------------------------------------------------------
+// Initial fetch & polling
+// ---------------------------------------------------------------------------
+
 fetchActiveDownloads();
 fetchHistory();
 

@@ -1,4 +1,5 @@
 import type { QueueEntry } from "../shared/types";
+import { loadDownloadFolder } from "../shared/folder-config";
 
 const QUEUE_STORAGE_KEY = "downloadQueue";
 const QUEUE_PAUSED_KEY = "downloadQueuePaused";
@@ -9,6 +10,7 @@ const BACKOFF_BASE_MS = 2000;
 export class DownloadQueue {
   private entries: QueueEntry[] = [];
   private paused = false;
+  downloadFolder = "";
 
   // -------------------------------------------------------------------------
   // Persistence
@@ -39,6 +41,7 @@ export class DownloadQueue {
       }
     }
 
+    this.downloadFolder = await loadDownloadFolder();
     await this.persist();
     this.processQueue();
   }
@@ -85,10 +88,13 @@ export class DownloadQueue {
 
     for (const entry of toPromote) {
       entry.status = "downloading";
+      const downloadFilename = this.downloadFolder
+        ? `${this.downloadFolder}/${entry.filename}`
+        : entry.filename;
       chrome.downloads.download(
         {
           url: entry.url,
-          filename: entry.filename,
+          filename: downloadFilename,
           conflictAction: "uniquify",
         },
         (downloadId) => {

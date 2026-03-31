@@ -37,6 +37,13 @@ const queue = new DownloadQueue();
 // Restore queue state on service worker startup
 queue.restore();
 
+// Update download folder when the user changes the setting
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.downloadFolder) {
+    queue.downloadFolder = (changes.downloadFolder.newValue as string) ?? "";
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Badge helpers
 // ---------------------------------------------------------------------------
