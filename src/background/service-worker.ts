@@ -3,8 +3,11 @@ import type {
   DownloadStatusResponse,
   DownloadHistoryEntry,
   DownloadHistoryResponse,
+  AppSettings,
+  SaveSettingsRequest,
+  GetSettingsRequest,
 } from "../shared/types";
-import { EXTENSION_NAME } from "../shared/constants";
+import { EXTENSION_NAME, SETTINGS_KEY, DEFAULT_SETTINGS } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
 import {
   resolveRedditVideoUrl,
@@ -15,11 +18,45 @@ import {
 import { resolveEmbedUrl } from "./embed-resolvers";
 import { DownloadQueue } from "./download-queue";
 
+
+// ---------------------------------------------------------------------------
+// Settings persistence
+// ---------------------------------------------------------------------------
+
+async function getSettings(): Promise<AppSettings> {
+  const result = await chrome.storage.sync.get(SETTINGS_KEY);
+  const settings = result[SETTINGS_KEY] as Partial<AppSettings> | undefined;
+  return { ...DEFAULT_SETTINGS, ...settings };
+}
+
+async function saveSettings(settings: AppSettings): Promise<void> {
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+}
+
+function formatFilename(
+  pattern: string,
+  folder: string,
+  vars: { username: string; tweetId: string; index?: number; date?: string; ext: string }
+): string {
+  let name = pattern
+    .replace(/{username}/g, vars.username)
+    .replace(/{tweetId}/g, vars.tweetId)
+    .replace(/{index}/g, vars.index !== undefined ? String(vars.index) : "")
+    .replace(/{date}/g, vars.date ?? new Date().toISOString().split("T")[0]);
+
+  name = name.replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const subfolder = folder.trim();
+  return subfolder ? `${subfolder}/${name}.${vars.ext}` : `${name}.${vars.ext}`;
+}
+
 // ---------------------------------------------------------------------------
 // Notification helper
 // ---------------------------------------------------------------------------
 
-function notify(title: string, message: string): void {
+async function notify(title: string, message: string): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.enableNotifications) return;
+
   chrome.notifications.create({
     type: "basic",
     iconUrl: chrome.runtime.getURL("icon.png"),
@@ -194,41 +231,52 @@ chrome.downloads.onChanged.addListener((delta) => {
 
 chrome.runtime.onMessage.addListener(
   (message: MessageRequest, sender, sendResponse) => {
-    // Security fix #24: only handle messages from this extension's own content
-    // scripts. Without this check, any content script in any tab can trigger
-    // downloads by sending a crafted message to the extension runtime.
     if (sender.id !== chrome.runtime.id) {
       return false;
     }
 
+    if (message.type === "get-settings") {
+      getSettings().then(sendResponse);
+      return true;
+    }
+
+    if (message.type === "save-settings") {
+      saveSettings(message.settings).then(() => sendResponse({ success: true }));
+      return true;
+    }
+
     if (message.type === "download-images") {
-      console.log(
-        `[${EXTENSION_NAME}] Received download-images request`,
-        message.images
-      );
-      notify(
-        "Starting download",
-        `Downloading ${message.images.length} image(s)...`
-      );
-      try {
-        for (const image of message.images) {
-          queue.enqueue(image.url, image.filename, "twitter").then(() => {
-            refreshPolling();
+      getSettings().then((settings) => {
+        console.log(`[${EXTENSION_NAME}] Received download-images request`, message.images);
+        notify("Starting download", `Downloading ${message.images.length} image(s)...`);
+        try {
+          message.images.forEach((image, index) => {
+            const ext = image.url.split(".").pop()?.split("?")[0]?.split(":")[0] ?? "jpg";
+            const filename = image.filename || formatFilename(settings.filenamePattern, settings.downloadFolder, {
+              username: message.username,
+              tweetId: message.tweetId,
+              index: message.images.length > 1 ? index + 1 : undefined,
+              ext,
+            });
+            queue.enqueue(image.url, filename, "twitter").then(() => {
+              refreshPolling();
+            });
           });
+          sendResponse({ success: true });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
         }
-        sendResponse({ success: true });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
-        notify("Error", msg);
-        sendResponse({ success: false, error: msg });
-      }
-      return false;
+      });
+      return true;
     }
 
     if (message.type === "download-video") {
       const { tweetId, username } = message;
-      const filename = `@${username}_${tweetId}_video.mp4`;
+      getSettings().then(settings => {
+        const filename = formatFilename(settings.filenamePattern, settings.downloadFolder, { username, tweetId, ext: "mp4" });
       console.log(
         `[${EXTENSION_NAME}] Received download-video request for tweet ${tweetId}`
       );
@@ -267,6 +315,7 @@ chrome.runtime.onMessage.addListener(
           notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
+      });
       return true;
     }
 

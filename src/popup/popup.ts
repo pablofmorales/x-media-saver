@@ -9,14 +9,28 @@ import type {
   QueueRetryRequest,
   QueuePauseRequest,
   QueueResumeRequest,
+  AppSettings,
+  GetSettingsRequest,
+  SaveSettingsRequest,
 } from "../shared/types";
-import { loadDownloadFolder, saveDownloadFolder } from "../shared/folder-config";
+
+
+const mainView = document.getElementById("main-view")!;
+const settingsView = document.getElementById("settings-view")!;
+const settingsBtn = document.getElementById("settings-btn")!;
+const backBtn = document.getElementById("back-btn")!;
 
 const activeSection = document.getElementById("active-section")!;
 const activeContainer = document.getElementById("active-downloads")!;
 const historySection = document.getElementById("history-section")!;
 const historyContainer = document.getElementById("history-downloads")!;
 const emptyState = document.getElementById("empty-state")!;
+
+const folderInput = document.getElementById("download-folder") as HTMLInputElement;
+const patternInput = document.getElementById("filename-pattern") as HTMLInputElement;
+const notifyCheckbox = document.getElementById("enable-notifications") as HTMLInputElement;
+const saveBtn = document.getElementById("save-settings-btn")!;
+const saveStatus = document.getElementById("save-status")!;
 
 // ---------------------------------------------------------------------------
 // Relative time formatting
@@ -291,6 +305,55 @@ function renderHistory(entries: DownloadHistoryEntry[]): void {
 }
 
 // ---------------------------------------------------------------------------
+// Settings logic
+// ---------------------------------------------------------------------------
+
+function showSettings(): void {
+  mainView.style.display = "none";
+  settingsView.style.display = "block";
+  loadSettings();
+}
+
+function hideSettings(): void {
+  settingsView.style.display = "none";
+  mainView.style.display = "block";
+}
+
+function loadSettings(): void {
+  const msg: GetSettingsRequest = { type: "get-settings" };
+  chrome.runtime.sendMessage(msg, (settings: AppSettings) => {
+    if (chrome.runtime.lastError || !settings) return;
+    folderInput.value = settings.downloadFolder;
+    patternInput.value = settings.filenamePattern;
+    notifyCheckbox.checked = settings.enableNotifications;
+  });
+}
+
+function saveSettings(): void {
+  const settings: AppSettings = {
+    downloadFolder: folderInput.value.trim(),
+    filenamePattern: patternInput.value.trim(),
+    enableNotifications: notifyCheckbox.checked,
+  };
+
+  const msg: SaveSettingsRequest = { type: "save-settings", settings };
+  saveBtn.setAttribute("disabled", "true");
+
+  chrome.runtime.sendMessage(msg, () => {
+    saveBtn.removeAttribute("disabled");
+    saveStatus.textContent = "Saved!";
+    saveStatus.classList.add("show");
+    setTimeout(() => {
+      saveStatus.classList.remove("show");
+    }, 2000);
+  });
+}
+
+settingsBtn.addEventListener("click", showSettings);
+backBtn.addEventListener("click", hideSettings);
+saveBtn.addEventListener("click", saveSettings);
+
+// ---------------------------------------------------------------------------
 // Visibility logic
 // ---------------------------------------------------------------------------
 
@@ -333,26 +396,53 @@ function fetchHistory(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Settings: download folder
+// Settings logic
 // ---------------------------------------------------------------------------
 
-const folderInput = document.getElementById("folder-input") as HTMLInputElement;
-const folderSaveBtn = document.getElementById("folder-save")!;
-const folderStatus = document.getElementById("folder-status")!;
+function showSettings(): void {
+  mainView.style.display = "none";
+  settingsView.style.display = "block";
+  loadSettings();
+}
 
-loadDownloadFolder().then((folder) => {
-  folderInput.value = folder;
-});
+function hideSettings(): void {
+  settingsView.style.display = "none";
+  mainView.style.display = "block";
+}
 
-folderSaveBtn.addEventListener("click", async () => {
-  const saved = await saveDownloadFolder(folderInput.value);
-  folderInput.value = saved;
-  folderStatus.textContent = saved ? `Saving to: Downloads/${saved}/` : "Using default Downloads folder";
-  folderStatus.style.display = "";
-  setTimeout(() => {
-    folderStatus.style.display = "none";
-  }, 3000);
-});
+function loadSettings(): void {
+  const msg: GetSettingsRequest = { type: "get-settings" };
+  chrome.runtime.sendMessage(msg, (settings: AppSettings) => {
+    if (chrome.runtime.lastError || !settings) return;
+    folderInput.value = settings.downloadFolder;
+    patternInput.value = settings.filenamePattern;
+    notifyCheckbox.checked = settings.enableNotifications;
+  });
+}
+
+function saveSettings(): void {
+  const settings: AppSettings = {
+    downloadFolder: folderInput.value.trim(),
+    filenamePattern: patternInput.value.trim(),
+    enableNotifications: notifyCheckbox.checked,
+  };
+
+  const msg: SaveSettingsRequest = { type: "save-settings", settings };
+  saveBtn.setAttribute("disabled", "true");
+
+  chrome.runtime.sendMessage(msg, () => {
+    saveBtn.removeAttribute("disabled");
+    saveStatus.textContent = "Saved!";
+    saveStatus.classList.add("show");
+    setTimeout(() => {
+      saveStatus.classList.remove("show");
+    }, 2000);
+  });
+}
+
+settingsBtn.addEventListener("click", showSettings);
+backBtn.addEventListener("click", hideSettings);
+saveBtn.addEventListener("click", saveSettings);
 
 // ---------------------------------------------------------------------------
 // Initial fetch & polling
