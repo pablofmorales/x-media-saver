@@ -4,15 +4,58 @@ import type {
   DownloadStatusResponse,
   DownloadHistoryEntry,
   DownloadHistoryResponse,
+  AppSettings,
+  SaveSettingsRequest,
 } from "../shared/types";
-import { EXTENSION_NAME } from "../shared/constants";
+import { EXTENSION_NAME, SETTINGS_KEY, DEFAULT_SETTINGS } from "../shared/constants";
 import { resolveVideoUrl } from "./api";
+
+// ---------------------------------------------------------------------------
+// Settings persistence
+// ---------------------------------------------------------------------------
+
+async function getSettings(): Promise<AppSettings> {
+  const result = await chrome.storage.sync.get(SETTINGS_KEY);
+  const settings = result[SETTINGS_KEY] as Partial<AppSettings> | undefined;
+  return { ...DEFAULT_SETTINGS, ...settings };
+}
+
+async function saveSettings(settings: AppSettings): Promise<void> {
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+}
+
+// ---------------------------------------------------------------------------
+// Filename resolver
+// ---------------------------------------------------------------------------
+
+function formatFilename(
+  pattern: string,
+  folder: string,
+  vars: { username: string; tweetId: string; index?: number; date?: string; ext: string }
+): string {
+  let name = pattern
+    .replace(/{username}/g, vars.username)
+    .replace(/{tweetId}/g, vars.tweetId)
+    .replace(/{index}/g, vars.index !== undefined ? String(vars.index) : "")
+    .replace(/{date}/g, vars.date ?? new Date().toISOString().split("T")[0]);
+
+  // Clean up potential double dashes or empty parts if index is missing
+  name = name.replace(/-+/g, "-").replace(/^-|-$/g, "");
+
+  const subfolder = folder.trim();
+  const fullPath = subfolder ? `${subfolder}/${name}.${vars.ext}` : `${name}.${vars.ext}`;
+
+  return fullPath;
+}
 
 // ---------------------------------------------------------------------------
 // Notification helper
 // ---------------------------------------------------------------------------
 
-function notify(title: string, message: string): void {
+async function notify(title: string, message: string): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.enableNotifications) return;
+
   chrome.notifications.create({
     type: "basic",
     iconUrl: chrome.runtime.getURL("icon.png"),
@@ -161,99 +204,129 @@ chrome.downloads.onChanged.addListener((delta) => {
 
 chrome.runtime.onMessage.addListener(
   (message: MessageRequest, _sender, sendResponse) => {
+    if (message.type === "get-settings") {
+      getSettings().then(sendResponse);
+      return true;
+    }
+
+    if (message.type === "save-settings") {
+      saveSettings(message.settings).then(() => sendResponse({ success: true }));
+      return true;
+    }
+
     if (message.type === "download-images") {
-      console.log(`[${EXTENSION_NAME}] Received download-images request`, message.images);
-      notify("Starting download", `Downloading ${message.images.length} image(s)...`);
-      try {
-        let success = false;
-        for (const image of message.images) {
-          chrome.downloads.download(
-            {
-              url: image.url,
-              filename: image.filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                return;
+      const { images, tweetId, username } = message;
+      console.log(`[${EXTENSION_NAME}] Received download-images request`, images);
+
+      getSettings().then((settings) => {
+        notify("Starting download", `Downloading ${images.length} image(s)...`);
+
+        try {
+          images.forEach((image, index) => {
+            const ext = image.url.split(".").pop()?.split("?")[0]?.split(":")[0] ?? "jpg";
+            const filename = formatFilename(settings.filenamePattern, settings.downloadFolder, {
+              username,
+              tweetId,
+              index: images.length > 1 ? index + 1 : undefined,
+              ext,
+            });
+
+            chrome.downloads.download(
+              {
+                url: image.url,
+                filename,
+                conflictAction: "uniquify",
+              },
+              (downloadId) => {
+                if (chrome.runtime.lastError) {
+                  const err = chrome.runtime.lastError.message ?? "unknown error";
+                  console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                  notify("Error", err);
+                  return;
+                }
+                if (downloadId !== undefined) {
+                  trackDownload(downloadId, filename);
+                }
               }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, image.filename);
-              }
-            }
-          );
+            );
+          });
+          sendResponse({ success: true });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
+          notify("Error", msg);
+          sendResponse({ success: false, error: msg });
         }
-        sendResponse({ success: true });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[${EXTENSION_NAME}] download-images error: ${msg}`);
-        notify("Error", msg);
-        sendResponse({ success: false, error: msg });
-      }
-      return false; // synchronous sendResponse
+      });
+      return true;
     }
 
     if (message.type === "download-video") {
       const { tweetId, username } = message;
-      const filename = `@${username}_${tweetId}_video.mp4`;
       console.log(`[${EXTENSION_NAME}] Received download-video request for tweet ${tweetId}`);
-      notify("Starting download", `Resolving video for tweet ${tweetId}...`);
 
-      resolveVideoUrl(tweetId)
-        .then((videoUrl) => {
-          if (!videoUrl) {
-            const errMsg = `Could not resolve video URL for tweet ${tweetId}`;
-            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
-            notify("Error", errMsg);
-            chrome.action.setBadgeText({ text: "ERR" });
-            chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-            setTimeout(() => {
-              if (activeDownloads.size === 0) {
-                chrome.action.setBadgeText({ text: "" });
-              }
-            }, 3000);
-            sendResponse({ success: false, error: errMsg });
-            return;
-          }
+      getSettings().then((settings) => {
+        notify("Starting download", `Resolving video for tweet ${tweetId}...`);
 
-          chrome.downloads.download(
-            {
-              url: videoUrl,
-              filename,
-              conflictAction: "uniquify",
-            },
-            (downloadId) => {
-              if (chrome.runtime.lastError) {
-                const err = chrome.runtime.lastError.message ?? "unknown error";
-                console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
-                notify("Error", err);
-                sendResponse({ success: false, error: err });
-                return;
-              }
-              if (downloadId !== undefined) {
-                trackDownload(downloadId, filename);
-                sendResponse({ success: true });
-              } else {
-                const errMsg = `Failed to start download for ${filename}`;
-                console.error(`[${EXTENSION_NAME}] ${errMsg}`);
-                notify("Error", errMsg);
-                chrome.action.setBadgeText({ text: "ERR" });
-                chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
-                sendResponse({ success: false, error: errMsg });
-              }
+        resolveVideoUrl(tweetId)
+          .then((videoUrl) => {
+            if (!videoUrl) {
+              const errMsg = `Could not resolve video URL for tweet ${tweetId}`;
+              console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+              notify("Error", errMsg);
+              chrome.action.setBadgeText({ text: "ERR" });
+              chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+              setTimeout(() => {
+                if (activeDownloads.size === 0) {
+                  chrome.action.setBadgeText({ text: "" });
+                }
+              }, 3000);
+              sendResponse({ success: false, error: errMsg });
+              return;
             }
-          );
-        })
-        .catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
-          notify("Error", msg);
-          sendResponse({ success: false, error: msg });
-        });
-      return true; // async sendResponse
+
+            const filename = formatFilename(settings.filenamePattern, settings.downloadFolder, {
+              username,
+              tweetId,
+              ext: "mp4",
+            });
+
+            chrome.downloads.download(
+              {
+                url: videoUrl,
+                filename,
+                conflictAction: "uniquify",
+              },
+              (downloadId) => {
+                if (chrome.runtime.lastError) {
+                  const err = chrome.runtime.lastError.message ?? "unknown error";
+                  console.error(`[${EXTENSION_NAME}] Download API error: ${err}`);
+                  notify("Error", err);
+                  sendResponse({ success: false, error: err });
+                  return;
+                }
+                if (downloadId !== undefined) {
+                  trackDownload(downloadId, filename);
+                  sendResponse({ success: true });
+                } else {
+                  const errMsg = `Failed to start download for ${filename}`;
+                  console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+                  notify("Error", errMsg);
+                  chrome.action.setBadgeText({ text: "ERR" });
+                  chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+                  sendResponse({ success: false, error: errMsg });
+                }
+              }
+            );
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[${EXTENSION_NAME}] download-video error: ${msg}`);
+            notify("Error", msg);
+            sendResponse({ success: false, error: msg });
+          });
+      });
+      return true;
     }
 
     if (message.type === "get-download-history") {

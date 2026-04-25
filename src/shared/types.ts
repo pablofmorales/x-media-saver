@@ -1,11 +1,14 @@
 export interface ImageDownloadRequest {
   type: "download-images";
   images: ImageInfo[];
+  tweetId: string;
+  username: string;
 }
 
 export interface ImageInfo {
   url: string;
-  filename: string;
+  // filename is now optional, background script can generate it if missing
+  filename?: string;
 }
 
 export interface VideoDownloadRequest {
@@ -48,4 +51,21 @@ export type MessageRequest =
   | ImageDownloadRequest
   | VideoDownloadRequest
   | GetDownloadStatusRequest
-  | GetDownloadHistoryRequest;
+  | GetDownloadHistoryRequest
+  | GetSettingsRequest
+  | SaveSettingsRequest;
+
+export interface AppSettings {
+  filenamePattern: string;
+  downloadFolder: string;
+  enableNotifications: boolean;
+}
+
+export interface GetSettingsRequest {
+  type: "get-settings";
+}
+
+export interface SaveSettingsRequest {
+  type: "save-settings";
+  settings: AppSettings;
+}

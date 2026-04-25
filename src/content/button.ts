@@ -96,18 +96,13 @@ function createSaveButton(tweet: HTMLElement, tweetId: string): HTMLElement {
         return;
       }
 
-      const images: ImageInfo[] = imageUrls.map((url, index) => {
-        const ext = getImageExtension(url);
-        const n = imageUrls.length > 1 ? `_${index + 1}` : "";
-        return {
-          url,
-          filename: `@${username}_${tweetId}${n}.${ext}`,
-        };
-      });
+      const images: ImageInfo[] = imageUrls.map((url) => ({ url }));
 
       const message: ImageDownloadRequest = {
         type: "download-images",
         images,
+        tweetId,
+        username,
       };
 
       console.log(`[${EXTENSION_NAME}] Sending download-images message`, message);
