@@ -13,7 +13,9 @@
     "https://api.vxtwitter.com/*",
     "https://www.reddit.com/*",
     "https://i.redd.it/*",
-    "https://v.redd.it/*"
+    "https://v.redd.it/*",
+    "https://www.instagram.com/*",
+    "https://*.cdninstagram.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.ts",
@@ -27,6 +29,10 @@
     {
       "matches": ["https://www.reddit.com/*"],
       "js": ["src/content-reddit/index.ts"]
+    },
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["src/content-instagram/index.ts"]
     }
   ],
   "icons": {

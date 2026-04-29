@@ -50,7 +50,7 @@ export class DownloadQueue {
   async enqueue(
     url: string,
     filename: string,
-    source: "twitter" | "reddit"
+    source: "twitter" | "reddit" | "instagram"
   ): Promise<QueueEntry> {
     const entry: QueueEntry = {
       id: crypto.randomUUID(),
