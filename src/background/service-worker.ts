@@ -15,6 +15,7 @@ import {
   resolveRedditImageUrl,
   resolveRedditGifUrl,
 } from "./reddit-api";
+import { resolveInstagramMedia } from "./instagram-api";
 import { resolveEmbedUrl } from "./embed-resolvers";
 import { DownloadQueue } from "./download-queue";
 
@@ -532,6 +533,46 @@ chrome.runtime.onMessage.addListener(
             `[${EXTENSION_NAME}] download-reddit-embed error: ${msg}`
           );
           notify("Error", msg);
+          sendResponse({ success: false, error: msg });
+        });
+      return true;
+    }
+
+    if (message.type === "download-instagram") {
+      const { url, username, shortcode, mediaType, downloadThumbnail } = message;
+      const suffix = downloadThumbnail ? "_thumbnail" : "";
+      console.log(
+        `[${EXTENSION_NAME}] Received download-instagram request for ${url} (thumb: ${downloadThumbnail})`
+      );
+      
+      if (!downloadThumbnail) {
+        notify("Starting download", `Resolving Instagram ${mediaType}...`);
+      }
+
+      resolveInstagramMedia(url, downloadThumbnail)
+        .then((result) => {
+          if (!result) {
+            const errMsg = `Could not resolve Instagram ${mediaType} ${shortcode}`;
+            console.error(`[${EXTENSION_NAME}] ${errMsg}`);
+            if (!downloadThumbnail) {
+                notify("Error", errMsg);
+                chrome.action.setBadgeText({ text: "ERR" });
+                chrome.action.setBadgeBackgroundColor({ color: "#f4212e" });
+            }
+            sendResponse({ success: false, error: errMsg });
+            return;
+          }
+
+          const filename = `ig-${username}_${shortcode}${suffix}.${result.extension}`;
+          queue.enqueue(result.url, filename, "instagram").then(() => {
+            refreshPolling();
+            sendResponse({ success: true });
+          });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[${EXTENSION_NAME}] download-instagram error: ${msg}`);
+          if (!downloadThumbnail) notify("Error", msg);
           sendResponse({ success: false, error: msg });
         });
       return true;

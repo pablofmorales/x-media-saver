@@ -7,7 +7,7 @@ export interface QueueEntry {
   retryCount: number;
   error?: string;
   addedAt: number;
-  source: "twitter" | "reddit";
+  source: "twitter" | "reddit" | "instagram";
 }
 
 export interface ImageDownloadRequest {
@@ -97,6 +97,15 @@ export interface RedditEmbedDownloadRequest {
   postId: string;
 }
 
+export interface InstagramDownloadRequest {
+  type: "download-instagram";
+  url: string;
+  username: string;
+  shortcode: string;
+  mediaType: "post" | "reel" | "story";
+  downloadThumbnail?: boolean;
+}
+
 export interface QueueCancelRequest {
   type: "queue-cancel";
   id: string;
@@ -125,6 +134,7 @@ export type MessageRequest =
   | RedditImageDownloadRequest
   | RedditGifDownloadRequest
   | RedditEmbedDownloadRequest
+  | InstagramDownloadRequest
   | GetDownloadStatusRequest
   | GetDownloadHistoryRequest
   | QueueCancelRequest

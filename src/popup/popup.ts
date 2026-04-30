@@ -396,55 +396,6 @@ function fetchHistory(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Settings logic
-// ---------------------------------------------------------------------------
-
-function showSettings(): void {
-  mainView.style.display = "none";
-  settingsView.style.display = "block";
-  loadSettings();
-}
-
-function hideSettings(): void {
-  settingsView.style.display = "none";
-  mainView.style.display = "block";
-}
-
-function loadSettings(): void {
-  const msg: GetSettingsRequest = { type: "get-settings" };
-  chrome.runtime.sendMessage(msg, (settings: AppSettings) => {
-    if (chrome.runtime.lastError || !settings) return;
-    folderInput.value = settings.downloadFolder;
-    patternInput.value = settings.filenamePattern;
-    notifyCheckbox.checked = settings.enableNotifications;
-  });
-}
-
-function saveSettings(): void {
-  const settings: AppSettings = {
-    downloadFolder: folderInput.value.trim(),
-    filenamePattern: patternInput.value.trim(),
-    enableNotifications: notifyCheckbox.checked,
-  };
-
-  const msg: SaveSettingsRequest = { type: "save-settings", settings };
-  saveBtn.setAttribute("disabled", "true");
-
-  chrome.runtime.sendMessage(msg, () => {
-    saveBtn.removeAttribute("disabled");
-    saveStatus.textContent = "Saved!";
-    saveStatus.classList.add("show");
-    setTimeout(() => {
-      saveStatus.classList.remove("show");
-    }, 2000);
-  });
-}
-
-settingsBtn.addEventListener("click", showSettings);
-backBtn.addEventListener("click", hideSettings);
-saveBtn.addEventListener("click", saveSettings);
-
-// ---------------------------------------------------------------------------
 // Initial fetch & polling
 // ---------------------------------------------------------------------------
 

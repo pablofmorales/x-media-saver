@@ -1,0 +1,59 @@
+/* Social Media Saver — Instagram content styles */
+
+.sms-save-container.instagram {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.sms-save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  color: inherit;
+}
+
+.sms-save-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+.sms-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+/* Loading state */
+.sms-save-btn.sms-loading {
+  pointer-events: none;
+}
+
+.sms-save-btn.sms-loading .sms-icon {
+  display: none;
+}
+
+.sms-save-btn.sms-loading::after {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: sms-spin 0.75s linear infinite;
+}
+
+@keyframes sms-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
