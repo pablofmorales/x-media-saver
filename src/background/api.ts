@@ -102,6 +102,14 @@ async function fetchFromVxTwitter(tweetId: string): Promise<string | null> {
 }
 
 export async function resolveVideoUrl(tweetId: string): Promise<string | null> {
+  // Fix #15: Validate tweetId to prevent URL injection
+  // Tweet IDs are strictly numeric. If the input contains anything else,
+  // it could be used to manipulate the API paths.
+  if (!/^\d+$/.test(tweetId)) {
+    console.error(`[X Media Saver] Invalid tweetId format: ${tweetId}`);
+    return null;
+  }
+
   const syndicationUrl = await fetchFromSyndication(tweetId);
   if (syndicationUrl) return syndicationUrl;
 

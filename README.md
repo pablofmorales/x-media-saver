@@ -1,22 +1,22 @@
-# X Media Saver
+# Social Media Saver
 
-A Chrome extension that adds a download button to X (Twitter) posts, letting you save images and videos with a single click.
+A Chrome extension that adds a download button to X (Twitter) and Reddit posts, letting you save images and videos with a single click.
 
 ## Features
 
-- **One-click download** — Adds a save button to every tweet's action bar
-- **Full-quality images** — Downloads images at original resolution (`?name=orig`)
+- **One-click download** — Adds a save button to every post's action bar
+- **Full-quality images** — Downloads images at original resolution
 - **Video support** — Resolves and downloads the highest-bitrate MP4 variant
-- **All media at once** — Downloads both images and video from mixed-media tweets in a single click
+- **Gallery support** — Downloads all images in a Reddit gallery or X multi-image post
 - **Download progress** — Badge icon shows real-time download percentage
-- **Download history** — Popup shows recent downloads with the option to open files in your file manager
-- **Desktop notifications** — Notifies you when downloads complete or encounter errors
+- **Download history** — Popup shows recent downloads with the option to open files
+- **Desktop notifications** — Notifies you when downloads complete or fail
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/blackasteroid/x-media-saver.git
+   git clone https://github.com/pablofmorales/x-media-saver.git
    cd x-media-saver
    ```
 
