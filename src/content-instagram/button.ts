@@ -1,5 +1,5 @@
 import { EXTENSION_NAME } from "../shared/constants";
-import { detectMedia } from "./media-detector";
+import { detectMedia } from "../content/instagram-detector";
 import type { InstagramDownloadRequest } from "../shared/types";
 
 const BUTTON_ATTR = "data-sms-save-btn";
@@ -16,12 +16,19 @@ function getActionBar(post: HTMLElement): HTMLElement | null {
   if (section) {
     // Check if it's the right section (contains buttons)
     const buttons = section.querySelectorAll('button');
-    if (buttons.length > 0) return section;
+    if (buttons.length > 0) return section as HTMLElement;
   }
 
-  // Fallback for Reels
-  const reelsActions = post.querySelector('[role="menu"]')?.parentElement;
-  if (reelsActions) return reelsActions;
+  // Fallback for Reels (vertical actions on the right)
+  const reelsActions = post.querySelector('[role="menu"]')?.parentElement || 
+                       post.querySelector('div[aria-label="Reels actions"]') ||
+                       post.querySelector('div[style*="flex-direction: column"] > div[role="button"]')?.parentElement;
+  if (reelsActions) return reelsActions as HTMLElement;
+
+  // Fallback for Stories (top right or bottom)
+  const storiesActions = post.querySelector('header')?.parentElement ||
+                         post.querySelector<HTMLElement>('div[role="dialog"] header');
+  if (storiesActions) return storiesActions as HTMLElement;
 
   return null;
 }

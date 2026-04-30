@@ -14,7 +14,7 @@
     "https://www.reddit.com/*",
     "https://i.redd.it/*",
     "https://v.redd.it/*",
-    "https://www.instagram.com/*",
+    "https://*.instagram.com/*",
     "https://*.cdninstagram.com/*"
   ],
   "background": {
@@ -31,7 +31,7 @@
       "js": ["src/content-reddit/index.ts"]
     },
     {
-      "matches": ["https://www.instagram.com/*"],
+      "matches": ["*://*.instagram.com/*"],
       "js": ["src/content-instagram/index.ts"]
     }
   ],

@@ -1,6 +1,6 @@
 import "./styles.css";
 import { EXTENSION_NAME } from "../shared/constants";
-import { detectMedia } from "./media-detector";
+import { detectMedia } from "../content/instagram-detector";
 import { injectSaveButton } from "./button";
 
 const processedElements = new WeakSet<HTMLElement>();
